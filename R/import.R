@@ -1,3 +1,10 @@
+replace_sanger_ptms<-function(X){
+  X<-str_replace_all(X,"pS","s")
+  X<-str_replace_all(X,"pT","t")
+  X<-str_replace_all(X,"pY","y")
+  return(X)
+}
+
 replace_ptms<-function(X){
   X<-str_replace_all(X,"S\\(Phospho\\)","s")
   X<-str_replace_all(X,"T\\(Phospho\\)","t")
@@ -175,6 +182,58 @@ importCCT<-function(file) {
   # transform data to list
   datl<-melt(dat, id.vars=c("gene_id","protein_id","site_id","peptide_id","peptide_sequence","modified_peptide_sequence","phosphosite"), variable.name="run_id", value.name="peptide_intensity")
   datl<-datl[complete.cases(datl),]
+
+  return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
+}
+
+#' Import SANGER file
+#'
+#' This function imports a SANGER file and converts the data to the unified phosphoviper format
+#'
+#' @param file SANGER file
+#' @param fasta Amino acid FASTA file from UniProt
+#' @param cores Integer indicating the number of cores to use (only 1 in Windows-based systems)
+#' @return peptide-level phosphoviper data.table
+#' @import data.table
+#' @importFrom plyr ddply .
+#' @import seqinr
+#' @import stringr
+#' @import pbapply
+#' @export
+importSANGER<-function(file, fasta, cores = 1) {
+  # load reference fasta library
+  message("Loading FASTA DB")
+  fasta<-read.fasta(fasta, seqtype="AA", as.string = TRUE, set.attributes = FALSE)
+  genes_proteins<-data.table("gene_id"=as.vector(sapply(names(fasta),function(X){strsplit(strsplit(X,"\\|")[[1]][3],"_")[[1]][1]})), "protein_id"=as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]})))
+  names(fasta)<-as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]}))
+
+  # load SANGER data
+  message("Loading SANGER data")
+  dat<-fread(file)
+  peptide_ids<-dat[,"Annotated sequence"]
+  names(peptide_ids)<-"V1"
+  dat$peptide_id<-replace_sanger_ptms(peptide_ids$V1)
+  dat[,c("Protein accession","Gene name","Annotated sequence","Protein site","Regulatroy kinases","KEGG name"):=NULL]
+
+  # map peptides to proteins
+  peptides_phosphopeptides<-data.table("peptide_id"=dat$peptide_id, "peptide_sequence"=str_to_upper(dat$peptide_id), "modified_peptide_sequence"=dat$peptide_id)
+  peptides_proteins<-data.table("peptide_sequence"=unique(peptides_phosphopeptides$peptide_sequence))
+  message("Mapping SANGER peptides to FASTA")
+  peptides_proteins$protein_id<-names(fasta)[pbsapply(peptides_proteins$peptide_sequence,function(X){index<-str_which(fasta,X);if(length(index)==1){return(index)}else{return(length(fasta)+1)}}, cl=cores)]
+  datan<-merge(merge(merge(peptides_proteins, peptides_phosphopeptides, by="peptide_sequence"),dat, by="peptide_id"), genes_proteins, by="protein_id")
+
+  # transform data to list
+  datl<-melt(datan, id.vars=c("gene_id","protein_id","peptide_id","peptide_sequence","modified_peptide_sequence"), variable.name="run_id", value.name="peptide_intensity")
+  datl<-datl[complete.cases(datl),]
+
+  # modify run identifier
+  datl$run_id<-sapply(as.character(datl$run_id),function(X){strsplit(X," ")[[1]][1]})
+
+  # map phosphosites
+  message("Mapping phosphopeptide sites")
+  site_mapping<-as.data.table(ddply(unique(datl[,c("gene_id","protein_id","modified_peptide_sequence")]),.(modified_peptide_sequence),function(X){convert_sites(fasta,X$gene_id,X$protein_id,X$modified_peptide_sequence)}))
+
+  datl<-merge(datl,site_mapping[,c("modified_peptide_sequence","phosphosite","site_id")],by="modified_peptide_sequence", allow.cartesian=TRUE)
 
   return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
 }
