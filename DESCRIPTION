@@ -1,12 +1,11 @@
 Package: phosphoviper
 Type: Package
-Title: What the Package Does (Title Case)
+Title: phosphoVIPER: phosphoproteomic extension for VIPER
 Version: 0.1.0
-Author: Who wrote it
-Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
-License: What license is it under?
+Author: George Rosenberger
+Maintainer: George Rosenberger <gr2578@cumc.columbia.edu>
+Description: phosphoVIPER provides adapters to analyse phosphoproteomic data using hpARACNe and VIPER.
+License: Columbia University Non-Commercial License
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 6.1.1
