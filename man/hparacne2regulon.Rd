@@ -4,12 +4,19 @@
 \alias{hparacne2regulon}
 \title{Import hpARACNe network}
 \usage{
-hparacne2regulon(afile, pfile)
+hparacne2regulon(afile, pfile, mfile = NA, method = "spearman",
+  verbose = TRUE)
 }
 \arguments{
 \item{afile}{hpARACNe network file}
 
 \item{pfile}{hpARACNe peptides file}
+
+\item{mfile}{Optional hpARACNe quantitative matrix file for TFmode refinement}
+
+\item{method}{Correlation method for TFmode refinement}
+
+\item{verbose}{Logical, whether progression messages should be printed in the terminal.}
 }
 \description{
 This function imports a hpARACNe network and generates site-specific regulons
