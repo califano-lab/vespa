@@ -5,6 +5,15 @@ replace_sanger_ptms<-function(X){
   return(X)
 }
 
+replace_spectronaut_ptms<-function(X){
+  X<-str_replace_all(X,"S\\[Phospho \\(STY\\)\\]","s")
+  X<-str_replace_all(X,"T\\[Phospho \\(STY\\)\\]","t")
+  X<-str_replace_all(X,"Y\\[Phospho \\(STY\\)\\]","y")
+  X<-str_replace_all(X,"\\_","")
+  X<-gsub("\\s*\\([^\\)]+\\)","",as.character(X))
+  return(X)
+}
+
 replace_ptms<-function(X){
   X<-str_replace_all(X,"S\\(Phospho\\)","s")
   X<-str_replace_all(X,"T\\(Phospho\\)","t")
@@ -79,6 +88,73 @@ importOpenSWATH<-function(file, fasta, cores = 1) {
   # modify run identifier
   datl$run_id<-as.vector(sapply(datl$run_id,function(X){strsplit(X,"\\/\\/")[[1]][2]}))
   datl$run_id<-as.vector(sapply(datl$run_id,function(X){strsplit(X,"\\.")[[1]][1]}))
+
+  # map phosphosites
+  message("Mapping phosphopeptide sites")
+  site_mapping<-as.data.table(ddply(unique(datl[,c("gene_id","protein_id","modified_peptide_sequence")]),.(modified_peptide_sequence),function(X){convert_sites(fasta,X$gene_id,X$protein_id,X$modified_peptide_sequence)}))
+  site_mapping<-merge(site_mapping, unique(datl[,c("gene_id","protein_id","peptide_id","peptide_sequence","modified_peptide_sequence")]),by="modified_peptide_sequence")
+
+  # generate matrix
+  datmx<-dcast(unique(datl[,c("peptide_id","run_id","peptide_intensity")]), peptide_id ~ run_id, value.var = "peptide_intensity")
+
+  # get annotation
+  rowids<-datmx$peptide_id
+  colids<-colnames(datmx[,-1])
+  datmx<-as.matrix(datmx[,-1])
+  datmx[datmx == 0]<-NA
+
+  # normalize matrix
+  datmxn<-log10(normalize.quantiles(datmx))
+  colnames(datmxn)<-colids
+  datmxn<-data.table(datmxn)
+  datmxn$peptide_id<-rowids
+
+  datln<-melt(datmxn, id.vars="peptide_id", variable.name="run_id", value.name="peptide_intensity")
+
+  datl<-merge(datln, site_mapping,by="peptide_id", allow.cartesian=TRUE)
+
+  return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
+}
+
+#' Import Spectronaut TXT file
+#'
+#' This function imports a Spectronaut TXT file and converts the data to the unified phosphoviper format
+#'
+#' @param file Spectronaut TXT file
+#' @param fasta Amino acid FASTA file from UniProt
+#' @param run_ids Column names of runs to extract
+#' @param cores Integer indicating the number of cores to use (only 1 in Windows-based systems)
+#' @return peptide-level phosphoviper data.table
+#' @import data.table
+#' @importFrom plyr ddply .
+#' @import seqinr
+#' @import stringr
+#' @import pbapply
+#' @import preprocessCore
+#' @export
+importSpectronaut<-function(file, fasta, run_ids, cores = 1) {
+
+  # load reference fasta library
+  message("Loading FASTA DB")
+  fasta<-read.fasta(fasta, seqtype="AA", as.string = TRUE, set.attributes = FALSE)
+  genes_proteins<-data.table("gene_id"=as.vector(sapply(names(fasta),function(X){strsplit(strsplit(X,"\\|")[[1]][3],"_")[[1]][1]})), "protein_id"=as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]})))
+  names(fasta)<-as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]}))
+
+  # load Spectronaut data
+  message("Loading Spectronaut data")
+  dat<-fread(file)
+  dat<-dat[,c("EG.PrecursorId_Phos", "ID_Phos", run_ids),with = FALSE]
+  dat<-melt(dat, id.vars=c("EG.PrecursorId_Phos","ID_Phos"), measure.vars=run_ids, variable.name="run_id", value.name="peptide_intensity")
+
+  names(dat)<-c("peptide_id","modified_peptide_sequence","run_id","peptide_intensity")
+
+  # map peptides to proteins
+  dat$modified_peptide_sequence<-replace_spectronaut_ptms(dat$modified_peptide_sequence)
+  dat$peptide_sequence<-str_to_upper(strip_ptms(dat$modified_peptide_sequence))
+  peptides_proteins<-data.table("peptide_sequence"=unique(dat$peptide_sequence))
+  message("Mapping Spectronaut peptides to FASTA")
+  peptides_proteins$protein_id<-names(fasta)[pbsapply(peptides_proteins$peptide_sequence,function(X){index<-str_which(fasta,X);if(length(index)==1){return(index)}else{return(length(fasta)+1)}}, cl=cores)]
+  datl<-merge(merge(peptides_proteins, dat, by="peptide_sequence"), genes_proteins, by="protein_id")
 
   # map phosphosites
   message("Mapping phosphopeptide sites")

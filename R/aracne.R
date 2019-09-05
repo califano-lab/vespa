@@ -192,15 +192,15 @@ hparacne2regulon<-function(afile, pfile, mfile=NA, method="spearman", verbose=TR
   return(regulons)
 }
 
-#' Convert site-specific regulons to protein regulons
+#' Convert site-specific regulators to protein regulators
 #'
-#' This function converts site-specific regulons to a list of protein - protein site-specific regulons
+#' This function converts site-specific regulators to site-specific regulators
 #'
 #' @param regulons VIPER regulons
 #' @import data.table
 #' @importFrom plyr dlply .
 #' @export
-site2protein<-function(regulons) {
+regulator2protein<-function(regulons) {
   # Generate regulon map
   regulon_map<-data.table("site_id"=names(regulons),"protein_id"=as.vector(sapply(names(regulons),function(X){strsplit(X,":")[[1]][2]})))
 
@@ -213,6 +213,43 @@ site2protein<-function(regulons) {
   return(regulons_list)
 }
 
+#' Convert site-specific regulons to protein regulons
+#'
+#' This function converts site-specific regulons to a list of protein - protein regulons
+#'
+#' @param regulons VIPER regulons
+#' @import data.table
+#' @importFrom plyr dlply .
+#' @export
+site2protein<-function(regulons, average_regulons = TRUE) {
+  # Generate site_id map
+  site_ids<-unique(c(names(regulons),unlist(sapply(regulons,function(X){names(X$tfmode)}))))
+  id_map<-data.table("site_id"=site_ids,"protein_id"=as.vector(sapply(site_ids,function(X){strsplit(X,":")[[1]][2]})))
+
+  # Generate regulon map
+  regulon_map<-data.table("site_id"=names(regulons),"protein_id"=as.vector(sapply(names(regulons),function(X){strsplit(X,":")[[1]][2]})))
+
+  # For each protein site, generate a unique regulon
+  if (average_regulons) {
+    regulon_map$regulon_id = 1
+  }
+  else {
+    regulon_map[,regulon_id:=c(1:length(unique(site_id))),key="protein_id"]
+  }
+
+  # Generate list of regulons
+  regulons_list<-dlply(regulon_map,.(regulon_id),function(X){subregulons<-regulons[X$site_id];names(subregulons)<-X$protein_id;subregulons<-lapply(subregulons,function(Y){ids<-names(Y$tfmode);names(Y$tfmode)<-with(id_map, protein_id[match(ids,site_id)]);return(Y)});return(subregulons)})
+
+  regulons_list_averaged<-lapply(regulons_list,function(X){lapply(X,function(Y){res<-sapply(unique(names(Y$tfmode)),function(Z){idx<-which(names(Y$tfmode)==Z);return(list("tfmode"=mean(Y$tfmode[idx]),"likelihood"=mean(Y$likelihood[idx])))});return(list("tfmode"=unlist(res[1,]),"likelihood"=unname(unlist(res[2,]))))})})
+
+  if (average_regulons) {
+    regulons_list_averaged = regulons_list_averaged[[1]]
+    class(regulons_list_averaged) <- "regulon"
+  }
+
+  return(regulons_list_averaged)
+}
+
 #' Convert site-specific regulons to gene regulons
 #'
 #' This function converts site-specific regulons to a list of gene - gene regulons
@@ -222,22 +259,18 @@ site2protein<-function(regulons) {
 #' @importFrom plyr dlply .
 #' @export
 site2gene<-function(regulons) {
-  # Generate site_id map
-  site_ids<-unique(c(names(regulons),unlist(sapply(regulons,function(X){names(X$tfmode)}))))
-  id_map<-data.table("site_id"=site_ids,"gene_id"=as.vector(sapply(ids,function(X){strsplit(X,":")[[1]][1]})))
+  regdf<-ldply(names(regulons),function(X){data.frame("site_id"=X, "target_id"=names(regulons[[X]]$tfmode), "tfmode"=regulons[[X]]$tfmode, "likelihood"=regulons[[X]]$likelihood, stringsAsFactors = FALSE)})
+  regdf$regulator_id<-as.vector(sapply(regdf$site_id,function(X){strsplit(X,":")[[1]][1]}))
+  regdf$target_id<-as.vector(sapply(regdf$target_id,function(X){strsplit(X,":")[[1]][1]}))
 
-  # Generate regulon map
-  regulon_map<-data.table("site_id"=names(regulons),"gene_id"=as.vector(sapply(names(regulons),function(X){strsplit(X,":")[[1]][1]})))
+  # Average interactions
+  regdfa<-ddply(regdf[,c("regulator_id","target_id","tfmode","likelihood")],.(regulator_id, target_id),function(X){data.frame("tfmode"=mean(X$tfmode), "likelihood"=mean(X$likelihood))})
 
-  # For each protein site, generate a unique regulon
-  regulon_map[,regulon_id:=c(1:length(unique(site_id))),key="gene_id"]
+  # Generate regulons
+  regulons_genes<-dlply(regdfa,.(regulator_id),function(X){tfmode<-X$tfmode; names(tfmode)<-X$target_id;return(list("tfmode"=tfmode, "likelihood"=X$likelihood))})
+  class(regulons_genes) <- "regulon"
 
-  # Generate list of regulons
-  regulons_list<-dlply(regulon_map,.(regulon_id),function(X){subregulons<-regulons[X$site_id];names(subregulons)<-X$gene_id;subregulons<-lapply(subregulons,function(Y){ids<-names(Y$tfmode);names(Y$tfmode)<-with(id_map, gene_id[match(ids,site_id)]);return(Y)});return(subregulons)})
-
-  regulons_list_averaged<-lapply(regulons_list,function(X){lapply(X,function(Y){res<-sapply(unique(names(Y$tfmode)),function(Z){idx<-which(names(Y$tfmode)==Z);return(list("tfmode"=mean(Y$tfmode[idx]),"likelihood"=mean(Y$likelihood[idx])))});return(list("tfmode"=unlist(res[1,]),"likelihood"=unname(unlist(res[2,]))))})})
-
-  return(regulons_list_averaged)
+  return(regulons_genes)
 }
 
 #' Subset regulons for targets

@@ -4,11 +4,11 @@
 \alias{site2protein}
 \title{Convert site-specific regulons to protein regulons}
 \usage{
-site2protein(regulons)
+site2protein(regulons, average_regulons = TRUE)
 }
 \arguments{
 \item{regulons}{VIPER regulons}
 }
 \description{
-This function converts site-specific regulons to a list of protein - protein site-specific regulons
+This function converts site-specific regulons to a list of protein - protein regulons
 }
