@@ -4,7 +4,15 @@
 \alias{importOpenSWATH}
 \title{Import OpenSWATH TSV file}
 \usage{
-importOpenSWATH(file, fasta, cores = 1)
+importOpenSWATH(
+  file,
+  fasta,
+  cores = 1,
+  normalization = FALSE,
+  batchcorrection = FALSE,
+  batchlevel = c("protein_id", "peptide_id"),
+  batchfile
+)
 }
 \arguments{
 \item{file}{OpenSWATH TSV file}
@@ -12,6 +20,14 @@ importOpenSWATH(file, fasta, cores = 1)
 \item{fasta}{Amino acid FASTA file from UniProt}
 
 \item{cores}{Integer indicating the number of cores to use (only 1 in Windows-based systems)}
+
+\item{normalization}{Either "FALSE" (skip normalization), "quantile" or "cyclicLoess" normalization}
+
+\item{batchcorrection}{Whether batchcorrection should be skipped ("FALSE") or applied by subsetting ("subset") or subsampling ("subsample").}
+
+\item{batchlevel}{On which level batch correction should be applied}
+
+\item{batchfile}{A data.table with batch correction annotation (columns: run_id, aggregator_id, ds_id)}
 }
 \value{
 peptide-level phosphoviper data.table

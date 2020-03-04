@@ -49,6 +49,58 @@ convert_sites<-function(fasta, gene_id, protein_id, modified_peptide_sequence){
   return(protein_sites[,c("site_id","phosphosite")])
 }
 
+subsample_pvt<-function(pvt, level=c("protein_id","peptide_id"), batches) {
+  subsample_peptides<-function(pvt, level=c("protein_id","peptide_id")) {
+    # Filter to overlapping peptides or proteins
+    pvt[,ds:=length(unique(ds_id)), by=level]
+    pvt<-subset(pvt, ds==length(unique(pvt$ds_id)))
+
+    # Add group variable
+    pvt$group_id<-paste(pvt$run_id,pvt$protein_id,pvt$peptide_id,sep="_")
+
+    # Compute peptide or protein observability
+    pvt[,obs:=length(unique(group_id)), by=c("ds_id", level)]
+    pvt[,total:=length(unique(group_id)), by="ds_id"]
+    pvt$freq<-pvt$obs/pvt$total
+    pvt[,min_freq:=min(freq), by=level]
+    pvt[,samples:=floor(min_freq*total)]
+    pvt[,subsample_id:=sample(length(group_id)), by=c("ds_id", level)]
+
+    pvt<-subset(pvt, subsample_id <= samples)
+    pvt[,c("ds","group_id","obs","total","freq","min_freq","samples","subsample_id") := NULL]
+
+    return(pvt)
+  }
+
+  # merge pvt with batches
+  pvt_batches<-merge(pvt, batches[,c("run_id","aggregator_id","ds_id")], by="run_id")
+
+  # subsample pvt batches over aggregator, e.g. separate sample
+  pvt_sub<-ddply(pvt_batches,.(aggregator_id),function(X){subsample_peptides(data.table(X), level)})
+
+  return(pvt_sub)
+}
+
+subset_pvt<-function(pvt, level=c("protein_id","peptide_id"), batches) {
+  subsample_peptides<-function(pvt, level=c("protein_id","peptide_id")) {
+    # Filter to overlapping peptides or proteins
+    pvt[,ds:=length(unique(ds_id)), by=level]
+    pvt<-subset(pvt, ds==length(unique(pvt$ds_id)))
+
+    pvt[,c("ds") := NULL]
+
+    return(pvt)
+  }
+
+  # merge pvt with batches
+  pvt_batches<-merge(pvt, batches[,c("run_id","aggregator_id","ds_id")], by="run_id")
+
+  # subsample pvt batches over aggregator, e.g. separate sample
+  pvt_sub<-ddply(pvt_batches,.(aggregator_id),function(X){subsample_peptides(data.table(X), level)})
+
+  return(pvt_sub)
+}
+
 #' Import OpenSWATH TSV file
 #'
 #' This function imports a OpenSWATH TSV file and converts the data to the unified phosphoviper format
@@ -56,6 +108,10 @@ convert_sites<-function(fasta, gene_id, protein_id, modified_peptide_sequence){
 #' @param file OpenSWATH TSV file
 #' @param fasta Amino acid FASTA file from UniProt
 #' @param cores Integer indicating the number of cores to use (only 1 in Windows-based systems)
+#' @param normalization Either "FALSE" (skip normalization), "quantile" or "cyclicLoess" normalization
+#' @param batchcorrection Whether batchcorrection should be skipped ("FALSE") or applied by subsetting ("subset") or subsampling ("subsample").
+#' @param batchlevel On which level batch correction should be applied
+#' @param batchfile A data.table with batch correction annotation (columns: run_id, aggregator_id, ds_id)
 #' @return peptide-level phosphoviper data.table
 #' @import data.table
 #' @importFrom plyr ddply .
@@ -63,8 +119,9 @@ convert_sites<-function(fasta, gene_id, protein_id, modified_peptide_sequence){
 #' @import stringr
 #' @import pbapply
 #' @import preprocessCore
+#' @importFrom limma normalizeCyclicLoess
 #' @export
-importOpenSWATH<-function(file, fasta, cores = 1) {
+importOpenSWATH<-function(file, fasta, cores = 1, normalization = FALSE, batchcorrection = FALSE, batchlevel = c("protein_id", "peptide_id"), batchfile) {
 
   # load reference fasta library
   message("Loading FASTA DB")
@@ -94,6 +151,13 @@ importOpenSWATH<-function(file, fasta, cores = 1) {
   site_mapping<-as.data.table(ddply(unique(datl[,c("gene_id","protein_id","modified_peptide_sequence")]),.(modified_peptide_sequence),function(X){convert_sites(fasta,X$gene_id,X$protein_id,X$modified_peptide_sequence)}))
   site_mapping<-merge(site_mapping, unique(datl[,c("gene_id","protein_id","peptide_id","peptide_sequence","modified_peptide_sequence")]),by="modified_peptide_sequence")
 
+  # conduct batch correction
+  if (batchcorrection=="subset") {
+    datl<-subset_pvt(datl, batchlevel, batchfile)
+  } else if (batchcorrection=="subsample") {
+    datl<-subsample_pvt(datl, batchlevel, batchfile)
+  }
+
   # generate matrix
   datmx<-dcast(unique(datl[,c("peptide_id","run_id","peptide_intensity")]), peptide_id ~ run_id, value.var = "peptide_intensity")
 
@@ -103,17 +167,35 @@ importOpenSWATH<-function(file, fasta, cores = 1) {
   datmx<-as.matrix(datmx[,-1])
   datmx[datmx == 0]<-NA
 
+  # log transform matrix
+  datmx<-log10(datmx)
+  datmx[datmx<0]<-NA
+
   # normalize matrix
-  datmxn<-log10(normalize.quantiles(datmx))
-  colnames(datmxn)<-colids
-  datmxn<-data.table(datmxn)
-  datmxn$peptide_id<-rowids
+  if (normalization==FALSE) {
+    datmxn<-datmx
+  }
+  else if (normalization=="quantile") {
+    datmxn<-normalize.quantiles(datmx)
+    colnames(datmxn)<-colids
+    datmxn<-data.table(datmxn)
+    datmxn$peptide_id<-rowids
+  }
+  else if (normalization=="cyclicLoess") {
+    datmxn<-normalizeCyclicLoess(datmx)
+    colnames(datmxn)<-colids
+    datmxn<-data.table(datmxn)
+    datmxn$peptide_id<-rowids
+  }
+  else {
+    stop("Error: Unknown normalization method")
+  }
 
   datln<-melt(datmxn, id.vars="peptide_id", variable.name="run_id", value.name="peptide_intensity")
 
   datl<-merge(datln, site_mapping,by="peptide_id", allow.cartesian=TRUE)
 
-  return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
+  return(subset(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")],!is.na(peptide_intensity)))
 }
 
 #' Import Spectronaut TXT file

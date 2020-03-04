@@ -4,8 +4,7 @@
 \alias{hparacne2regulon}
 \title{Import hpARACNe network}
 \usage{
-hparacne2regulon(afile, pfile, mfile = NA, method = "spearman",
-  verbose = TRUE)
+hparacne2regulon(afile, pfile, mfile = NA, method = "spearman", verbose = TRUE)
 }
 \arguments{
 \item{afile}{hpARACNe network file}
