@@ -4,7 +4,14 @@
 \alias{export2hparacne}
 \title{Export hpARACNe files}
 \usage{
-export2hparacne(datl, output_dir, kinases, phosphatases)
+export2hparacne(
+  datl,
+  output_dir,
+  kinases,
+  phosphatases,
+  interactions,
+  confidence_threshold = 0.5
+)
 }
 \arguments{
 \item{datl}{Unified phosphoviper format}
@@ -14,6 +21,10 @@ export2hparacne(datl, output_dir, kinases, phosphatases)
 \item{kinases}{List of kinases (UniProtKB)}
 
 \item{phosphatases}{List of phosphatases (UniProtKB)}
+
+\item{interactions}{HSM/D or HSM/P Interaction table (UniProtKB)}
+
+\item{confidence_threshold}{Interaction confidence_threshold}
 }
 \description{
 This function exports hpARACNe input files from the unified phosphoviper format

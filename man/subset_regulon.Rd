@@ -4,10 +4,12 @@
 \alias{subset_regulon}
 \title{Subset regulons for targets}
 \usage{
-subset_regulon(regulons, targets)
+subset_regulon(regulons, targets, min_size = 10)
 }
 \arguments{
 \item{regulons}{VIPER regulons}
+
+\item{min_size}{minimum regulon size}
 
 \item{target}{Vector of targets}
 }

@@ -6,9 +6,11 @@
 #' @param output_dir Output directory
 #' @param kinases List of kinases (UniProtKB)
 #' @param phosphatases List of phosphatases (UniProtKB)
+#' @param interactions HSM/D or HSM/P Interaction table (UniProtKB)
+#' @param confidence_threshold Interaction confidence_threshold
 #' @import data.table
 #' @export
-export2hparacne<-function(datl, output_dir, kinases, phosphatases) {
+export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions, confidence_threshold=0.5) {
   # format output directory
   dir.create(output_dir)
 
@@ -18,7 +20,7 @@ export2hparacne<-function(datl, output_dir, kinases, phosphatases) {
   datl<-merge(datl, pqp_top[,c("site_id","peptide_id"),which=FALSE], by=c("site_id","peptide_id"))
 
   # generate matrix
-  datm<-dcast(unique(datl[,c("peptide_id","run_id","peptide_intensity")]), peptide_id ~ run_id, value.var = "peptide_intensity")
+  datm<-dcast(data.table(unique(datl[,c("peptide_id","run_id","peptide_intensity")])), peptide_id ~ run_id, value.var = "peptide_intensity")
 
   # get annotation
   phosphoAnno<-as.matrix(datm[,1])
@@ -36,6 +38,33 @@ export2hparacne<-function(datl, output_dir, kinases, phosphatases) {
 
   # write kinases + phosphatases
   write.table(unique(c(subset(datl, protein_id %in% kinases)$peptide_id, subset(datl, protein_id %in% phosphatases)$peptide_id)), file=file.path(output_dir,"kinases_phosphatases.txt"), quote=FALSE, col.names=FALSE, row.names=FALSE, sep="\t")
+
+  # write targets (only phosphopeptides or VIPER activity is used for targets, but not protein abundance)
+  write.table(unique(subset(datl, phosphosite != "PA")$peptide_id), file=file.path(output_dir,"targets.txt"), quote=FALSE, col.names=FALSE, row.names=FALSE, sep="\t")
+
+  # subset to regulators
+  # regulator_ppi<-subset(regulator_ppi, regulator %in% c(kinases, phosphatases))
+
+  if ("site_id" %in% names(interactions)) {
+    regulator_ppi<-unique(datl[,c("protein_id","peptide_id")])
+    names(regulator_ppi)<-c("regulator","regulator_peptide_id")
+
+    target_ppi<-unique(datl[,c("site_id","peptide_id")])
+    names(target_ppi)<-c("site_id","target_peptide_id")
+
+    phosphointeractions<-merge(merge(subset(interactions, confidence > confidence_threshold), regulator_ppi, by="regulator", allow.cartesian=TRUE), target_ppi, by="site_id", allow.cartesian=TRUE)[,c("regulator_peptide_id","target_peptide_id","confidence")]
+  }
+  else {
+    regulator_ppi<-unique(subset(datl, phosphosite=="PA")[,c("protein_id","peptide_id")])
+    names(regulator_ppi)<-c("regulator","regulator_peptide_id")
+
+    target_ppi<-unique(subset(datl, phosphosite=="PV")[,c("protein_id","peptide_id")])
+    names(target_ppi)<-c("target","target_peptide_id")
+
+    phosphointeractions<-unique(merge(merge(subset(interactions, confidence > confidence_threshold), regulator_ppi, by="regulator", allow.cartesian=TRUE), target_ppi, by="target", allow.cartesian=TRUE)[,c("regulator_peptide_id","target_peptide_id","confidence")])
+  }
+
+  write.table(phosphointeractions, file=file.path(output_dir,"phosphointeractions.txt"), quote=FALSE, row.names=FALSE, sep="\t")
 }
 
 #' Export to matrix
@@ -62,6 +91,84 @@ export2mx<-function(datl) {
   rownames(phosphoExp)<-datm$site_id
 
   return(phosphoExp)
+}
+
+#' Export to unified phosphoviper format from viper matrix
+#'
+#' This function exports a viper matrix to the unified phosphoviper format
+#'
+#' @param matrix
+#' @param fasta Amino acid FASTA file from UniProt
+#' @param tag Site tag
+#' @return phosphoviper table
+#' @import data.table
+#' @export
+vmx2pv<-function(vmx, fasta, tag = "PV") {
+  # load reference fasta library
+  message("Loading FASTA DB")
+  fasta<-read.fasta(fasta, seqtype="AA", as.string = TRUE, set.attributes = FALSE)
+  genes_proteins<-data.table("gene_id"=as.vector(sapply(names(fasta),function(X){strsplit(strsplit(X,"\\|")[[1]][3],"_")[[1]][1]})), "protein_id"=as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]})))
+
+  pv<-reshape2::melt(vmx, value.name="peptide_intensity")
+  names(pv)<-c("protein_id","run_id","peptide_intensity")
+  pv<-merge(genes_proteins, pv, by="protein_id")
+  pv$modified_peptide_sequence<-pv$protein_id
+  pv$peptide_sequence<-pv$protein_id
+  pv$phosphosite<-tag
+  pv$site_id<-paste(pv$gene_id,pv$protein_id,pv$phosphosite,sep=":")
+  pv$peptide_id<-paste(pv$gene_id,pv$protein_id,pv$phosphosite,sep=":")
+
+  return(pv)
+}
+
+#' metaVIPER regulon selection
+#'
+#' @param ges Gene Expression Signature (features X samples)
+#' @param net.list List object with the networks to be used
+#' @return Optimized network with best regulon per gene
+#' @export
+optimizeRegulon <- function(ges, net.list, min_size=25, pleiotropy=FALSE, pleiotropyArgs = list(regulators = 0.05, shadow = 0.05, targets = 10, penalty = 20, method = "adaptive")) {
+  selectRegulon<-function(vip.list, net.list, g) {
+    w.mat <- matrix(0L, nrow = num.nets, ncol = 1)
+    rownames(w.mat) <- names(net.list)
+
+    for (s in 1:num.samps) {
+      nes.vals <- unlist(lapply(vip.list, function(x){
+        if (g %in% rownames(x)) {
+          return(x[g,s])
+        } else {
+          return(0)
+        }}))
+      max.ind <- which.max(abs(nes.vals))
+      w.mat[max.ind, 1] <- w.mat[max.ind, 1] + 1
+    }
+
+    return(net.list[[row.names(w.mat)[which.max(w.mat)]]][[g]])
+  }
+
+  num.nets <- length(net.list)
+  num.samps <- ncol(ges)
+
+  ## run VIPER with each network
+  print('Generating VIPER matrices...')
+  vip.list <- list()
+  for (i in 1:num.nets) {
+    vip.list[[i]] <- viper(ges, net.list[i], method = 'none', minsize=min_size, pleiotropy = pleiotropy, pleiotropyArgs
+ = pleiotropyArgs)
+  }
+  names(vip.list) <- names(net.list)
+
+  ## select best regulon for each gene
+  message("")
+  message('Selecting best regulons by max(abs(NES))...')
+  uni.genes <- unique(unlist(lapply(vip.list, rownames)))
+  regulons<-lapply(uni.genes, function(g){selectRegulon(vip.list, net.list, g)})
+  names(regulons)<-uni.genes
+
+  regulons[sapply(regulons, is.null)] <- NULL
+
+  class(regulons)<-"regulon"
+  return(regulons)
 }
 
 #' Copied from VIPER package
@@ -137,22 +244,34 @@ TFscore <- function (regul, mu = NULL, sigma = NULL, verbose=TRUE) {
 #' @param pfile hpARACNe peptides file
 #' @param mfile Optional hpARACNe quantitative matrix file for TFmode refinement
 #' @param method Correlation method for TFmode refinement
+#' @param confidence_threshold Interaction confidence_threshold
+#' @param priors Logical, whether prior interaction probabilities should be used.
 #' @param verbose Logical, whether progression messages should be printed in the terminal.
 #' @import data.table
 #' @importFrom plyr dlply .
 #' @export
-hparacne2regulon<-function(afile, pfile, mfile=NA, method="spearman", verbose=TRUE) {
+hparacne2regulon<-function(afile, pfile, mfile=NA, method="spearman", confidence_threshold=0, priors=TRUE, verbose=TRUE) {
   aracne<-fread(afile)
+  if (!("Prior" %in% names(aracne))) {
+    aracne$Prior<-1
+  }
   peptides<-fread(pfile)
 
   # Map peptide identifiers to site identififers
   aracne<-merge(aracne,peptides[,c("peptide_id","site_id"), with = FALSE], by.x="Regulator", by.y="peptide_id", allow.cartesian=TRUE)
   aracne<-merge(aracne,peptides[,c("peptide_id","site_id"), with = FALSE], by.x="Target", by.y="peptide_id", allow.cartesian=TRUE)
-  aracne<-aracne[,c("site_id.x","site_id.y","MI","Correlation"), with = FALSE]
-  names(aracne)<-c("Regulator","Target","MI","Correlation")
+  aracne<-aracne[,c("site_id.x","site_id.y","MI","Correlation","Prior"), with = FALSE]
+  names(aracne)<-c("Regulator","Target","MI","Correlation","Prior")
+
+  # Apply confidence threshold
+  aracne<-subset(aracne, Prior > confidence_threshold)
 
   # Parse quantitative matrix if specified
-  if (!is.na(mfile)) {
+  if (class(mfile)=="matrix") {
+    mx<-mfile
+    aracne<-subset(aracne, Regulator %in% rownames(mx) & Target %in% rownames(mx))
+  }
+  else if (!is.na(mfile)) {
     mx<-fread(mfile)
     mx<-merge(mx,peptides[,c("peptide_id","site_id"), with = FALSE], by="peptide_id", allow.cartesian=TRUE)
     mx_ids<-mx$site_id
@@ -165,6 +284,11 @@ hparacne2regulon<-function(afile, pfile, mfile=NA, method="spearman", verbose=TR
 
   # Compute likelihood from MI
   aracne$likelihood<-(aracne$MI / max(aracne$MI))
+
+  # Use priors
+  if (priors) {
+    aracne$likelihood<-aracne$likelihood * aracne$Prior
+  }
 
   # Generate raw regulon
   regulons<-dlply(aracne,.(Regulator),function(X){tfmode<-X$Correlation;names(tfmode)<-X$Target;return(list("tfmode"=tfmode, "likelihood"=X$likelihood))})
@@ -279,9 +403,10 @@ site2gene<-function(regulons) {
 #'
 #' @param regulons VIPER regulons
 #' @param target Vector of targets
+#' @param min_size minimum regulon size
 #' @export
-subset_regulon<-function(regulons,targets) {
-  subregulon<-lapply(regulons,function(X){ids<-which(names(X$tfmode) %in% targets);if(length(ids)>0){return(list("tfmode"=X$tfmode[ids], "likelihood"=X$likelihood[ids]))}})
+subset_regulon<-function(regulons,targets,min_size=10) {
+  subregulon<-lapply(regulons,function(X){ids<-which(names(X$tfmode) %in% targets);if(length(ids)>min_size){return(list("tfmode"=X$tfmode[ids], "likelihood"=X$likelihood[ids]))}})
 
   return(subregulon[sapply(subregulon,length)>0])
 }

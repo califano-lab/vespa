@@ -4,7 +4,15 @@
 \alias{hparacne2regulon}
 \title{Import hpARACNe network}
 \usage{
-hparacne2regulon(afile, pfile, mfile = NA, method = "spearman", verbose = TRUE)
+hparacne2regulon(
+  afile,
+  pfile,
+  mfile = NA,
+  method = "spearman",
+  confidence_threshold = 0,
+  priors = TRUE,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{afile}{hpARACNe network file}
@@ -14,6 +22,10 @@ hparacne2regulon(afile, pfile, mfile = NA, method = "spearman", verbose = TRUE)
 \item{mfile}{Optional hpARACNe quantitative matrix file for TFmode refinement}
 
 \item{method}{Correlation method for TFmode refinement}
+
+\item{confidence_threshold}{Interaction confidence_threshold}
+
+\item{priors}{Logical, whether prior interaction probabilities should be used.}
 
 \item{verbose}{Logical, whether progression messages should be printed in the terminal.}
 }
