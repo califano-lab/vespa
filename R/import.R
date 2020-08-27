@@ -14,6 +14,18 @@ replace_spectronaut_ptms<-function(X){
   return(X)
 }
 
+replace_mq_ptms<-function(X){
+  X<-str_replace_all(X,"pS","s")
+  X<-str_replace_all(X,"pT","t")
+  X<-str_replace_all(X,"pY","y")
+  X<-str_replace_all(X,"S\\(ph\\)","s")
+  X<-str_replace_all(X,"T\\(ph\\)","t")
+  X<-str_replace_all(X,"Y\\(ph\\)","y")
+  X<-str_replace_all(X,"\\.","")
+  X<-gsub("\\s*\\([^\\)]+\\)","",as.character(X))
+  return(X)
+}
+
 replace_ptms<-function(X){
   X<-str_replace_all(X,"S\\(Phospho\\)","s")
   X<-str_replace_all(X,"T\\(Phospho\\)","t")
@@ -266,14 +278,17 @@ importSpectronaut<-function(file, fasta, run_ids, cores = 1) {
   # load Spectronaut data
   message("Loading Spectronaut data")
   dat<-fread(file)
-  dat<-dat[,c("EG.PrecursorId_Phos", "ID_Phos", run_ids),with = FALSE]
-  dat<-melt(dat, id.vars=c("EG.PrecursorId_Phos","ID_Phos"), measure.vars=run_ids, variable.name="run_id", value.name="peptide_intensity")
+  dat<-dat[,c("EG.PrecursorId", run_ids),with = FALSE]
+  dat<-melt(dat, id.vars=c("EG.PrecursorId"), measure.vars=run_ids, variable.name="run_id", value.name="peptide_intensity")
 
-  names(dat)<-c("peptide_id","modified_peptide_sequence","run_id","peptide_intensity")
+  names(dat)<-c("peptide_id","run_id","peptide_intensity")
+
+  dat$modified_peptide_sequence<-sapply(dat$peptide_id,function(X){strsplit(X, "\\.")[[1]][1]})
 
   # map peptides to proteins
   dat$modified_peptide_sequence<-replace_spectronaut_ptms(dat$modified_peptide_sequence)
   dat$peptide_sequence<-str_to_upper(strip_ptms(dat$modified_peptide_sequence))
+  dat<-subset(dat, peptide_sequence != modified_peptide_sequence)
   peptides_proteins<-data.table("peptide_sequence"=unique(dat$peptide_sequence))
   message("Mapping Spectronaut peptides to FASTA")
   peptides_proteins$protein_id<-names(fasta)[pbsapply(peptides_proteins$peptide_sequence,function(X){index<-str_which(fasta,X);if(length(index)==1){return(index)}else{return(length(fasta)+1)}}, cl=cores)]
@@ -300,6 +315,90 @@ importSpectronaut<-function(file, fasta, run_ids, cores = 1) {
   datmxn$peptide_id<-rowids
 
   datln<-melt(datmxn, id.vars="peptide_id", variable.name="run_id", value.name="peptide_intensity")
+
+  datl<-merge(datln, site_mapping,by="peptide_id", allow.cartesian=TRUE)
+
+  return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
+}
+
+#' Import MaxQuant Evidence TXT file
+#'
+#' This function imports a MaxQuant Evidence TXT file and converts the data to the unified phosphoviper format
+#'
+#' @param file MaxQuant Evidence TXT file
+#' @param fasta Amino acid FASTA file from UniProt
+#' @param cores Integer indicating the number of cores to use (only 1 in Windows-based systems)
+#' @return peptide-level phosphoviper data.table
+#' @import data.table
+#' @importFrom plyr ddply .
+#' @import seqinr
+#' @import stringr
+#' @import pbapply
+#' @import preprocessCore
+#' @export
+importMaxQuant<-function(file, fasta, cores = 1) {
+
+  # load reference fasta library
+  message("Loading FASTA DB")
+  fasta<-read.fasta(fasta, seqtype="AA", as.string = TRUE, set.attributes = FALSE)
+  genes_proteins<-data.table("gene_id"=as.vector(sapply(names(fasta),function(X){strsplit(strsplit(X,"\\|")[[1]][3],"_")[[1]][1]})), "protein_id"=as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]})))
+  names(fasta)<-as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]}))
+
+  # load MaxQuant data
+  message("Loading MaxQuant data")
+  dat<-fread(file)
+
+  if ("Modified sequence" %in% colnames(dat)) {
+    colids<-c("Modified sequence","Charge","Experiment","Intensity","PEP")
+  } else {
+    colids<-c("Modified Sequence","Charge","Experiment","Intensity","PEP")
+  }
+
+  dat<-dat[,colids,with = FALSE]
+
+  names(dat)<-c("peptide_id","precursor_charge","run_id","peptide_intensity","pep")
+
+  dat$modified_peptide_sequence<-sapply(dat$peptide_id,function(X){str_replace_all(X,"\\_","")})
+  dat$peptide_id<-paste(dat$peptide_id,dat$precursor_charge,sep=".")
+
+  # map peptides to proteins
+  dat$modified_peptide_sequence<-replace_mq_ptms(dat$modified_peptide_sequence)
+  dat$peptide_sequence<-str_to_upper(strip_ptms(dat$modified_peptide_sequence))
+  dat<-subset(dat, peptide_sequence != modified_peptide_sequence)
+  peptides_proteins<-data.table("peptide_sequence"=unique(dat$peptide_sequence))
+  message("Mapping MaxQuant peptides to FASTA")
+  peptides_proteins$protein_id<-names(fasta)[pbsapply(peptides_proteins$peptide_sequence,function(X){index<-str_which(fasta,X);if(length(index)==1){return(index)}else{return(length(fasta)+1)}}, cl=cores)]
+  datl<-merge(merge(peptides_proteins, dat, by="peptide_sequence"), genes_proteins, by="protein_id")
+
+  # map phosphosites
+  message("Mapping phosphopeptide sites")
+  site_mapping<-as.data.table(ddply(unique(datl[,c("gene_id","protein_id","modified_peptide_sequence")]),.(modified_peptide_sequence),function(X){convert_sites(fasta,X$gene_id,X$protein_id,X$modified_peptide_sequence)}))
+  site_mapping<-merge(site_mapping, unique(datl[,c("gene_id","protein_id","peptide_id","peptide_sequence","modified_peptide_sequence")]),by="modified_peptide_sequence")
+
+  # reduce list to best results
+  datl<-datl[which(is.finite(datl$peptide_intensity)),]
+  datl[which(!is.finite(datl$pep)),"pep"]<-1
+  datl<-ddply(datl[which(is.finite(datl$peptide_intensity)),],.(peptide_id, run_id), function(X){return(data.frame("peptide_intensity"=X[which(X$pep==min(X$pep))[1],"peptide_intensity"]))})
+
+  datl$peptide_intensity<-log10(datl$peptide_intensity)
+
+  # generate matrix
+  datmx<-dcast(data.table(datl[,c("peptide_id","run_id","peptide_intensity")]), peptide_id ~ run_id, value.var = "peptide_intensity")
+
+  # get annotation
+  rowids<-datmx$peptide_id
+  colids<-colnames(datmx[,-1])
+  datmx<-as.matrix(datmx[,-1])
+  datmx[datmx == 0]<-NA
+
+  # normalize matrix
+  datmxn<-normalize.quantiles(datmx)
+  colnames(datmxn)<-colids
+  datmxn<-data.table(datmxn)
+  datmxn$peptide_id<-rowids
+
+  datln<-melt(datmxn, id.vars="peptide_id", variable.name="run_id", value.name="peptide_intensity")
+  datln<-subset(datln, !is.na(peptide_intensity))
 
   datl<-merge(datln, site_mapping,by="peptide_id", allow.cartesian=TRUE)
 

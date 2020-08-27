@@ -7,10 +7,11 @@
 #' @param kinases List of kinases (UniProtKB)
 #' @param phosphatases List of phosphatases (UniProtKB)
 #' @param interactions HSM/D or HSM/P Interaction table (UniProtKB)
+#' @param target_sites (Optional) list of target sites to restrict dataset (PV site_id)
 #' @param confidence_threshold Interaction confidence_threshold
 #' @import data.table
 #' @export
-export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions, confidence_threshold=0.5) {
+export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions, target_sites=NULL, confidence_threshold=0) {
   # format output directory
   dir.create(output_dir)
 
@@ -40,7 +41,12 @@ export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions,
   write.table(unique(c(subset(datl, protein_id %in% kinases)$peptide_id, subset(datl, protein_id %in% phosphatases)$peptide_id)), file=file.path(output_dir,"kinases_phosphatases.txt"), quote=FALSE, col.names=FALSE, row.names=FALSE, sep="\t")
 
   # write targets (only phosphopeptides or VIPER activity is used for targets, but not protein abundance)
-  write.table(unique(subset(datl, phosphosite != "PA")$peptide_id), file=file.path(output_dir,"targets.txt"), quote=FALSE, col.names=FALSE, row.names=FALSE, sep="\t")
+  if (!is.null(target_sites)) {
+    target_ids<-unique(subset(datl, phosphosite != "PA" & site_id %in% target_sites)$peptide_id)
+  } else {
+    target_ids<-unique(subset(datl, phosphosite != "PA")$peptide_id)
+  }
+  write.table(target_ids, file=file.path(output_dir,"targets.txt"), quote=FALSE, col.names=FALSE, row.names=FALSE, sep="\t")
 
   # subset to regulators
   # regulator_ppi<-subset(regulator_ppi, regulator %in% c(kinases, phosphatases))
@@ -82,7 +88,7 @@ export2mx<-function(datl) {
   datl<-merge(datl, pqp_top[,c("site_id","peptide_id"),which=FALSE], by=c("site_id","peptide_id"))
 
   # generate matrix
-  datm<-dcast(unique(datl[,c("site_id","run_id","peptide_intensity")]), site_id ~ run_id, value.var = "peptide_intensity")
+  datm<-dcast(data.table(unique(datl[,c("site_id","run_id","peptide_intensity")])), site_id ~ run_id, value.var = "peptide_intensity")
 
   # get annotation
   phosphoExp<-as.matrix(datm[,-1])
@@ -97,26 +103,40 @@ export2mx<-function(datl) {
 #'
 #' This function exports a viper matrix to the unified phosphoviper format
 #'
-#' @param matrix
+#' @param matrix phosphoVIPER quantitative matrix
 #' @param fasta Amino acid FASTA file from UniProt
 #' @param tag Site tag
 #' @return phosphoviper table
 #' @import data.table
 #' @export
-vmx2pv<-function(vmx, fasta, tag = "PV") {
+vmx2pv<-function(vmx, fasta=NULL, tag = "PV") {
   # load reference fasta library
-  message("Loading FASTA DB")
-  fasta<-read.fasta(fasta, seqtype="AA", as.string = TRUE, set.attributes = FALSE)
-  genes_proteins<-data.table("gene_id"=as.vector(sapply(names(fasta),function(X){strsplit(strsplit(X,"\\|")[[1]][3],"_")[[1]][1]})), "protein_id"=as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]})))
+  if (!is.null(fasta)) {
+    message("Loading FASTA DB")
+    fasta<-read.fasta(fasta, seqtype="AA", as.string = TRUE, set.attributes = FALSE)
+    genes_proteins<-data.table("gene_id"=as.vector(sapply(names(fasta),function(X){strsplit(strsplit(X,"\\|")[[1]][3],"_")[[1]][1]})), "protein_id"=as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]})))
 
-  pv<-reshape2::melt(vmx, value.name="peptide_intensity")
-  names(pv)<-c("protein_id","run_id","peptide_intensity")
-  pv<-merge(genes_proteins, pv, by="protein_id")
-  pv$modified_peptide_sequence<-pv$protein_id
-  pv$peptide_sequence<-pv$protein_id
-  pv$phosphosite<-tag
-  pv$site_id<-paste(pv$gene_id,pv$protein_id,pv$phosphosite,sep=":")
-  pv$peptide_id<-paste(pv$gene_id,pv$protein_id,pv$phosphosite,sep=":")
+    pv<-reshape2::melt(vmx, value.name="peptide_intensity")
+    names(pv)<-c("protein_id","run_id","peptide_intensity")
+    pv<-merge(genes_proteins, pv, by="protein_id")
+    pv$modified_peptide_sequence<-pv$protein_id
+    pv$peptide_sequence<-pv$protein_id
+    pv$phosphosite<-tag
+    pv$site_id<-paste(pv$gene_id,pv$protein_id,pv$phosphosite,sep=":")
+    pv$peptide_id<-paste(pv$gene_id,pv$protein_id,pv$phosphosite,sep=":")
+  } else {
+    pv<-reshape2::melt(vmx, value.name="peptide_intensity")
+    names(pv)<-c("site_id","run_id","peptide_intensity")
+
+    regulon_map<-data.table("site_id"=as.character(unique(pv$site_id)),"gene_id"=as.vector(sapply(as.character(unique(pv$site_id)),function(X){strsplit(X,":")[[1]][1]})),"protein_id"=as.vector(sapply(as.character(unique(pv$site_id)),function(X){strsplit(X,":")[[1]][2]})))
+
+    pv<-merge(pv, regulon_map, by="site_id")
+    pv$site_id<-paste(pv$site_id,tag,sep=":")
+    pv$modified_peptide_sequence<-pv$site_id
+    pv$peptide_sequence<-pv$site_id
+    pv$phosphosite<-tag
+    pv$peptide_id<-pv$site_id
+  }
 
   return(pv)
 }
@@ -253,7 +273,10 @@ TFscore <- function (regul, mu = NULL, sigma = NULL, verbose=TRUE) {
 hparacne2regulon<-function(afile, pfile, mfile=NA, method="spearman", confidence_threshold=0, priors=TRUE, verbose=TRUE) {
   aracne<-fread(afile)
   if (!("Prior" %in% names(aracne))) {
-    aracne$Prior<-1
+    aracne$Prior<-aracne$MI
+  }
+  if (!("Correlation" %in% names(aracne))) {
+    aracne$Correlation<-NA
   }
   peptides<-fread(pfile)
 

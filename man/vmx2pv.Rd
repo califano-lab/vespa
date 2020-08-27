@@ -4,12 +4,14 @@
 \alias{vmx2pv}
 \title{Export to unified phosphoviper format from viper matrix}
 \usage{
-vmx2pv(vmx, fasta, tag = "PV")
+vmx2pv(vmx, fasta = NULL, tag = "PV")
 }
 \arguments{
 \item{fasta}{Amino acid FASTA file from UniProt}
 
 \item{tag}{Site tag}
+
+\item{matrix}{phosphoVIPER quantitative matrix}
 }
 \value{
 phosphoviper table

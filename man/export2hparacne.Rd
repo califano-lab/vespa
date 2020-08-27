@@ -10,7 +10,8 @@ export2hparacne(
   kinases,
   phosphatases,
   interactions,
-  confidence_threshold = 0.5
+  target_sites = NULL,
+  confidence_threshold = 0
 )
 }
 \arguments{
@@ -23,6 +24,8 @@ export2hparacne(
 \item{phosphatases}{List of phosphatases (UniProtKB)}
 
 \item{interactions}{HSM/D or HSM/P Interaction table (UniProtKB)}
+
+\item{target_sites}{(Optional) list of target sites to restrict dataset (PV site_id)}
 
 \item{confidence_threshold}{Interaction confidence_threshold}
 }
