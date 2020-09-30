@@ -9,9 +9,10 @@ export2hparacne(
   output_dir,
   kinases,
   phosphatases,
-  interactions,
+  interactions = NULL,
   target_sites = NULL,
-  confidence_threshold = 0
+  confidence_threshold = 0,
+  interaction_level = "substrate"
 )
 }
 \arguments{
@@ -28,6 +29,8 @@ export2hparacne(
 \item{target_sites}{(Optional) list of target sites to restrict dataset (PV site_id)}
 
 \item{confidence_threshold}{Interaction confidence_threshold}
+
+\item{interaction_level}{Interaction level ("substrate" or "activity")}
 }
 \description{
 This function exports hpARACNe input files from the unified phosphoviper format

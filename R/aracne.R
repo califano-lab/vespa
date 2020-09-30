@@ -9,9 +9,10 @@
 #' @param interactions HSM/D or HSM/P Interaction table (UniProtKB)
 #' @param target_sites (Optional) list of target sites to restrict dataset (PV site_id)
 #' @param confidence_threshold Interaction confidence_threshold
+#' @param interaction_level Interaction level ("substrate" or "activity")
 #' @import data.table
 #' @export
-export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions, target_sites=NULL, confidence_threshold=0) {
+export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions=NULL, target_sites=NULL, confidence_threshold=0, interaction_level="substrate") {
   # format output directory
   dir.create(output_dir)
 
@@ -34,43 +35,52 @@ export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions,
   # write peptides
   write.table(unique(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite")]), file=file.path(output_dir,"peptides.txt"), quote=FALSE, row.names=FALSE, sep="\t")
 
+  # select regulators
+  if (interaction_level == "activity") {
+    regulators <- subset(datl, phosphosite %in% c("PA","PV"))
+  } else {
+    regulators <- datl
+  }
+
+  # select targets (exclude protein abundance)
+  targets <- subset(datl, phosphosite!="PA")
+
   # write kinases
-  write.table(unique(subset(datl, protein_id %in% kinases)$peptide_id), file=file.path(output_dir,"kinases.txt"), quote=FALSE, col.names=FALSE, row.names=FALSE, sep="\t")
+  write.table(unique(subset(regulators, protein_id %in% kinases)$peptide_id), file=file.path(output_dir,"kinases.txt"), quote=FALSE, col.names=FALSE, row.names=FALSE, sep="\t")
 
   # write kinases + phosphatases
-  write.table(unique(c(subset(datl, protein_id %in% kinases)$peptide_id, subset(datl, protein_id %in% phosphatases)$peptide_id)), file=file.path(output_dir,"kinases_phosphatases.txt"), quote=FALSE, col.names=FALSE, row.names=FALSE, sep="\t")
+  write.table(unique(c(subset(regulators, protein_id %in% kinases)$peptide_id, subset(regulators, protein_id %in% phosphatases)$peptide_id)), file=file.path(output_dir,"kinases_phosphatases.txt"), quote=FALSE, col.names=FALSE, row.names=FALSE, sep="\t")
 
   # write targets (only phosphopeptides or VIPER activity is used for targets, but not protein abundance)
   if (!is.null(target_sites)) {
-    target_ids<-unique(subset(datl, phosphosite != "PA" & site_id %in% target_sites)$peptide_id)
+    target_ids<-unique(subset(targets, site_id %in% target_sites)$peptide_id)
   } else {
-    target_ids<-unique(subset(datl, phosphosite != "PA")$peptide_id)
+    target_ids<-unique(targets$peptide_id)
   }
   write.table(target_ids, file=file.path(output_dir,"targets.txt"), quote=FALSE, col.names=FALSE, row.names=FALSE, sep="\t")
 
-  # subset to regulators
-  # regulator_ppi<-subset(regulator_ppi, regulator %in% c(kinases, phosphatases))
+  # write reference interactions
+  if (!is.null(interactions)) {
+    if ("site_id" %in% names(interactions)) {
+      regulator_ppi<-unique(regulators[,c("protein_id","peptide_id")])
+      names(regulator_ppi)<-c("regulator","regulator_peptide_id")
 
-  if ("site_id" %in% names(interactions)) {
-    regulator_ppi<-unique(datl[,c("protein_id","peptide_id")])
-    names(regulator_ppi)<-c("regulator","regulator_peptide_id")
+      target_ppi<-unique(targets[,c("site_id","peptide_id")])
+      names(target_ppi)<-c("site_id","target_peptide_id")
 
-    target_ppi<-unique(datl[,c("site_id","peptide_id")])
-    names(target_ppi)<-c("site_id","target_peptide_id")
+      phosphointeractions<-merge(merge(subset(interactions, confidence > confidence_threshold), regulator_ppi, by="regulator", allow.cartesian=TRUE), target_ppi, by="site_id", allow.cartesian=TRUE)[,c("regulator_peptide_id","target_peptide_id","confidence")]
+    } else {
+      regulator_ppi<-unique(regulators[,c("protein_id","peptide_id")])
+      names(regulator_ppi)<-c("regulator","regulator_peptide_id")
 
-    phosphointeractions<-merge(merge(subset(interactions, confidence > confidence_threshold), regulator_ppi, by="regulator", allow.cartesian=TRUE), target_ppi, by="site_id", allow.cartesian=TRUE)[,c("regulator_peptide_id","target_peptide_id","confidence")]
+      target_ppi<-unique(targets[,c("protein_id","peptide_id")])
+      names(target_ppi)<-c("target","target_peptide_id")
+
+      phosphointeractions<-merge(merge(subset(interactions, confidence > confidence_threshold), regulator_ppi, by="regulator", allow.cartesian=TRUE), target_ppi, by="target", allow.cartesian=TRUE)[,c("regulator_peptide_id","target_peptide_id","confidence")]
+    }
+
+    write.table(phosphointeractions, file=file.path(output_dir,"phosphointeractions.txt"), quote=FALSE, row.names=FALSE, sep="\t")
   }
-  else {
-    regulator_ppi<-unique(subset(datl, phosphosite=="PA")[,c("protein_id","peptide_id")])
-    names(regulator_ppi)<-c("regulator","regulator_peptide_id")
-
-    target_ppi<-unique(subset(datl, phosphosite=="PV")[,c("protein_id","peptide_id")])
-    names(target_ppi)<-c("target","target_peptide_id")
-
-    phosphointeractions<-unique(merge(merge(subset(interactions, confidence > confidence_threshold), regulator_ppi, by="regulator", allow.cartesian=TRUE), target_ppi, by="target", allow.cartesian=TRUE)[,c("regulator_peptide_id","target_peptide_id","confidence")])
-  }
-
-  write.table(phosphointeractions, file=file.path(output_dir,"phosphointeractions.txt"), quote=FALSE, row.names=FALSE, sep="\t")
 }
 
 #' Export to matrix
@@ -281,8 +291,12 @@ hparacne2regulon<-function(afile, pfile, mfile=NA, method="spearman", confidence
   peptides<-fread(pfile)
 
   # Map peptide identifiers to site identififers
-  aracne<-merge(aracne,peptides[,c("peptide_id","site_id"), with = FALSE], by.x="Regulator", by.y="peptide_id", allow.cartesian=TRUE)
-  aracne<-merge(aracne,peptides[,c("peptide_id","site_id"), with = FALSE], by.x="Target", by.y="peptide_id", allow.cartesian=TRUE)
+  aracne<-merge(aracne,peptides[,c("protein_id","peptide_id","site_id"), with = FALSE], by.x="Regulator", by.y="peptide_id", allow.cartesian=TRUE)
+  aracne<-merge(aracne,peptides[,c("protein_id","peptide_id","site_id"), with = FALSE], by.x="Target", by.y="peptide_id", allow.cartesian=TRUE)
+
+  # Remove interactions between sites of the same protein
+  aracne<-subset(aracne, protein_id.x != protein_id.y)
+
   aracne<-aracne[,c("site_id.x","site_id.y","MI","Correlation","Prior"), with = FALSE]
   names(aracne)<-c("Regulator","Target","MI","Correlation","Prior")
 

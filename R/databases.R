@@ -78,3 +78,16 @@ loadHSMD<-function() {
   # save(hsmd,file="../../code/phosphoviper/data/human_hsmd.rda")
   data("human_hsmd")
 }
+
+#' Load human reference PathwayCommons interactions
+#'
+#' Based on PathwayCommons, version 12.
+#'
+#' @return Table of PPI with their scores
+#' @references \url{https://www.pathwaycommons.org/}
+#' @export
+loadPCdb<-function() {
+  # pcdb<-readRDS("pc.rds")
+  # save(pcdb,file="../../code/phosphoviper/data/human_pcdb.rda")
+  data("human_pcdb")
+}
