@@ -9,3 +9,19 @@ License: Columbia University Non-Commercial License
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.1.1
+Imports: 
+    BatchQC,
+    data.table,
+    limma,
+    mixtools,
+    pbapply,
+    plyr,
+    preprocessCore,
+    pROC,
+    reshape,
+    reshape2,
+    seqinr,
+    stringr,
+    sva,
+    tidyr,
+    viper
