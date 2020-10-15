@@ -173,7 +173,10 @@ optimizeRegulon <- function(ges, net.list, min_size=25, pleiotropy=FALSE, pleiot
       w.mat[max.ind, 1] <- w.mat[max.ind, 1] + 1
     }
 
-    return(net.list[[row.names(w.mat)[which.max(w.mat)]]][[g]])
+    selected_regulon<-net.list[[row.names(w.mat)[which.max(w.mat)]]][[g]]
+    selected_regulon$origin<-row.names(w.mat)[which.max(w.mat)]
+
+    return(selected_regulon)
   }
 
   num.nets <- length(net.list)
