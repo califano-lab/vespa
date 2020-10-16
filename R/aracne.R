@@ -174,7 +174,9 @@ optimizeRegulon <- function(ges, net.list, min_size=25, pleiotropy=FALSE, pleiot
     }
 
     selected_regulon<-net.list[[row.names(w.mat)[which.max(w.mat)]]][[g]]
-    selected_regulon$origin<-row.names(w.mat)[which.max(w.mat)]
+    if (is.na(as.numeric(names(net.list)[1]))) {
+      selected_regulon$origin<-row.names(w.mat)[which.max(w.mat)]
+    }
 
     return(selected_regulon)
   }
@@ -445,8 +447,53 @@ site2gene<-function(regulons) {
 #' @param target Vector of targets
 #' @param min_size minimum regulon size
 #' @export
-subset_regulon<-function(regulons,targets,min_size=10) {
-  subregulon<-lapply(regulons,function(X){ids<-which(names(X$tfmode) %in% targets);if(length(ids)>min_size){return(list("tfmode"=X$tfmode[ids], "likelihood"=X$likelihood[ids]))}})
+subsetRegulon<-function(regulons,targets,min_size=10) {
+  subregulon<-lapply(regulons,function(X){ids<-which(names(X$tfmode) %in% targets);if(length(ids)>min_size){return(list("tfmode"=X$tfmode[ids], "likelihood"=X$likelihood[ids], "origin"=X$origin[ids]))}})
 
   return(subregulon[sapply(subregulon,length)>0])
+}
+
+##########
+#' Prune Regulons
+#'
+#' This function limits the maximum size of the regulons
+#'
+#' @param regulon Object of class regulon
+#' @param cutoff Number indicating the maximum size for the regulons (maximum number of target genes)
+#' @param adaptive Logical, whether adaptive size should be used (i.e. sum(likelihood^2))
+#' @param eliminate Logical whether regulons smalles than \code{cutoff} should be eliminated
+#' @param wm Optional numeric vector of weights (0; 1) for the genes
+#' @return Prunned regulon
+#' @seealso \code{\link{viper}}, \code{\link{msviper}}
+#' @examples
+#' data(bcellViper, package="bcellViper")
+#' hist(sapply(regulon, function(x) sum(x$likelihood)/max(x$likelihood)), nclass=20)
+#' preg <- pruneRegulon(regulon, 400)
+#' hist(sapply(preg, function(x) sum(x$likelihood)/max(x$likelihood)), nclass=20)
+#' @export
+pruneRegulon <- function(regulon, cutoff=50, adaptive=TRUE, eliminate=FALSE, wm=NULL) {
+  if (adaptive) {
+    regulon <- lapply(regulon, function(x, cutoff, wm) {
+      likelihood <- x$likelihood
+      if (!is.null(wm)) {
+        wm <- wm[match(names(x$tfmode), names(wm))]
+        wm[is.na(wm)] <- 0
+        likelihood <- likelihood * wm
+      }
+      pos <- order(likelihood, decreasing=TRUE)
+      ws <- (likelihood/max(likelihood))^2
+      pos <- pos[cumsum(ws[pos])<=cutoff]
+      return(list(tfmode=x$tfmode[pos], likelihood=x$likelihood[pos], origin=x$origin[pos]))
+    }, cutoff=cutoff, wm=wm)
+  }
+  else {
+    regulon <- lapply(regulon, function(x, cutoff) {
+      pos <- order(x$likelihood, decreasing=TRUE)
+      pos <- pos[1:min(length(pos), cutoff)]
+      return(list(tfmode=x$tfmode[pos], likelihood=x$likelihood[pos], origin=x$origin[pos]))
+    }, cutoff=cutoff)
+    if (eliminate) regulon <- regulon[sapply(regulon, function(x) length(x$tfmode))>=cutoff]
+  }
+  class(regulon) <- "regulon"
+  return(regulon)
 }
