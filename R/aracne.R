@@ -279,20 +279,22 @@ TFscore <- function (regul, mu = NULL, sigma = NULL, verbose=TRUE) {
 #' @param pfile hpARACNe peptides file
 #' @param mfile Optional hpARACNe quantitative matrix file for TFmode refinement
 #' @param method Correlation method for TFmode refinement
-#' @param confidence_threshold Interaction confidence_threshold
-#' @param priors Logical, whether prior interaction probabilities should be used.
-#' @param verbose Logical, whether progression messages should be printed in the terminal.
+#' @param likelihood_threshold Interaction confidence threshold to filter likelihood
+#' @param priors Logical, whether prior interaction probabilities should be used as weights for likelihood
+#' @param verbose Logical, whether progression messages should be printed in the terminal
 #' @import data.table
 #' @importFrom plyr dlply .
 #' @export
-hparacne2regulon<-function(afile, pfile, mfile=NA, method="spearman", confidence_threshold=0, priors=TRUE, verbose=TRUE) {
+hparacne2regulon<-function(afile, pfile, mfile=NA, method="spearman", likelihood_threshold=0.5, priors=FALSE, verbose=TRUE) {
   aracne<-fread(afile)
   if (!("Prior" %in% names(aracne))) {
-    aracne$Prior<-aracne$MI
+    aracne$Prior<-NA
   }
   if (!("Correlation" %in% names(aracne))) {
     aracne$Correlation<-NA
   }
+
+  # Load peptides
   peptides<-fread(pfile)
 
   # Map peptide identifiers to site identififers
@@ -305,8 +307,16 @@ hparacne2regulon<-function(afile, pfile, mfile=NA, method="spearman", confidence
   aracne<-aracne[,c("site_id.x","site_id.y","MI","Correlation","Prior"), with = FALSE]
   names(aracne)<-c("Regulator","Target","MI","Correlation","Prior")
 
-  # Apply confidence threshold
-  aracne<-subset(aracne, Prior > confidence_threshold)
+  # Compute likelihood from MI
+  aracne$likelihood<-(aracne$MI / max(aracne$MI))
+
+  # Optionally use priors as weights for likelihood
+  if (priors) {
+    aracne$likelihood<-aracne$likelihood * aracne$Prior
+  }
+
+  # Remove interactions below threshold
+  aracne<-subset(aracne, likelihood > likelihood_threshold)
 
   # Parse quantitative matrix if specified
   if (class(mfile)=="matrix") {
@@ -322,14 +332,6 @@ hparacne2regulon<-function(afile, pfile, mfile=NA, method="spearman", confidence
     mx<-as.matrix(mx)
     rownames(mx)<-mx_ids
     mx[which(is.na(mx))]<-0
-  }
-
-  # Compute likelihood from MI
-  aracne$likelihood<-(aracne$MI / max(aracne$MI))
-
-  # Use priors
-  if (priors) {
-    aracne$likelihood<-aracne$likelihood * aracne$Prior
   }
 
   # Generate raw regulon
