@@ -14,6 +14,17 @@ replace_spectronaut_ptms<-function(X){
   return(X)
 }
 
+replace_oldmq_ptms<-function(X){
+  X<-str_replace_all(X,"S\\(Phospho \\(STY\\)\\)","s")
+  X<-str_replace_all(X,"T\\(Phospho \\(STY\\)\\)","t")
+  X<-str_replace_all(X,"Y\\(Phospho \\(STY\\)\\)","y")
+  X<-str_replace_all(X,"\\(Oxidation \\(M\\)\\)","")
+  X<-str_replace_all(X,"\\(Acetyl \\(Protein N-term\\)\\)","")
+  X<-str_replace_all(X,"\\_","")
+  X<-gsub("\\s*\\([^\\)]+\\)","",as.character(X))
+  return(X)
+}
+
 replace_mq_ptms<-function(X){
   X<-str_replace_all(X,"pS","s")
   X<-str_replace_all(X,"pT","t")
@@ -321,11 +332,131 @@ importSpectronaut<-function(file, fasta, run_ids, cores = 1) {
   return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
 }
 
-#' Import MaxQuant Evidence TXT file
+#' Import protein Progenesis TXT file
 #'
-#' This function imports a MaxQuant Evidence TXT file and converts the data to the unified phosphoviper format
+#' This function imports a protein Progenesis TXT file and converts the data to the unified phosphoviper format
 #'
-#' @param file MaxQuant Evidence TXT file
+#' @param file proteo Progenesis TXT file
+#' @param run_ids Column names of runs to extract
+#' @return peptide-level phosphoviper data.table
+#' @import data.table
+#' @export
+importProteoProgenesis<-function(file, run_ids) {
+  # load Progenesis data
+  message("Loading Progenesis data")
+  dat<-fread(file)
+  dat<-dat[,c("geneName","ac", run_ids),with = FALSE]
+  names(dat)<-c("gene_id","protein_id",run_ids)
+
+  # transform to longlist
+  datl<-reshape2::melt(dat, id.vars=c("gene_id", "protein_id"), measure.vars=run_ids, variable.name="run_id", value.name="peptide_intensity")
+  datl$peptide_intensity<-log10(datl$peptide_intensity)
+
+  # append additional columns
+  datl$phosphosite<-"PA"
+  datl$site_id<-paste(datl$gene_id,datl$protein_id,datl$phosphosite,sep=":")
+  datl$peptide_id<-datl$protein_id
+  datl$peptide_sequence<-datl$protein_id
+  datl$modified_peptide_sequence<-datl$protein_id
+
+  return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
+}
+
+#' Import phospho Progenesis TXT file
+#'
+#' This function imports a phospho Progenesis TXT file and converts the data to the unified phosphoviper format
+#'
+#' @param file phospho Progenesis TXT file
+#' @param fasta Amino acid FASTA file from UniProt
+#' @param run_ids Column names of runs to extract
+#' @param cores Integer indicating the number of cores to use (only 1 in Windows-based systems)
+#' @return peptide-level phosphoviper data.table
+#' @import data.table
+#' @importFrom plyr ddply .
+#' @import seqinr
+#' @import stringr
+#' @import pbapply
+#' @import preprocessCore
+#' @export
+importPhosphoProgenesis<-function(file, fasta, run_ids, cores = 1) {
+
+  # load reference fasta library
+  message("Loading FASTA DB")
+  fasta<-read.fasta(fasta, seqtype="AA", as.string = TRUE, set.attributes = FALSE)
+  genes_proteins<-data.table("gene_id"=as.vector(sapply(names(fasta),function(X){strsplit(strsplit(X,"\\|")[[1]][3],"_")[[1]][1]})), "protein_id"=as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]})))
+  names(fasta)<-as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]}))
+
+  # load Progenesis data
+  message("Loading Progenesis data")
+  dat<-fread(file)
+  dat<-dat[,c("peptide","ptm", run_ids),with = FALSE]
+  names(dat)<-c("peptide_sequence","ptm",run_ids)
+  dat$peptide_id<-paste(rownames(dat),dat$peptide_sequence,sep="_")
+
+  # separate into meta and quantitative matrix
+  datq<-dat[,c("peptide_id", run_ids),with=FALSE]
+  datq<-reshape2::melt(datq, id.vars=c("peptide_id"), measure.vars=run_ids, variable.name="run_id", value.name="peptide_intensity")
+
+  datm<-dat[,c("peptide_id","peptide_sequence","ptm"),with=FALSE]
+  datm$modifications<-datm$ptm
+
+  # separate rows
+  datm<-as.data.frame(separate_rows(datm, ptm, convert = TRUE, sep="\\|"))
+
+  # remove non-phospho peptides
+  datm<-datm[str_detect(datm$ptm, "Phospho"),]
+
+  # extract sites
+  datm$ptm <- str_extract_all(datm$ptm, "\\[([^\\[\\]]*)\\]")
+  datm$ptm <- as.numeric(regmatches(datm$ptm, gregexpr("\\[\\K[^\\]]+(?=\\])", datm$ptm, perl=TRUE)))
+
+  # sequence modification function
+  modify_seq<-function(ps,site){paste(substr(ps,1,(as.numeric(site)-1)),str_to_lower(substr(ps,as.numeric(site),as.numeric(site))),substr(ps,(as.numeric(site)+1),(nchar(ps))),sep="")}
+
+  datm<-ddply(datm,.(peptide_id,peptide_sequence,modifications),function(X){ps<-unique(X$peptide_sequence); for(site in sort(X$ptm, decreasing = TRUE)){ps<-modify_seq(ps, site)}; return(data.frame("modified_peptide_sequence"=ps))})
+
+  # map peptides to proteins
+  peptides_proteins<-data.table("peptide_sequence"=unique(datm$peptide_sequence))
+  message("Mapping Progenesis peptides to FASTA")
+  peptides_proteins$protein_id<-names(fasta)[pbsapply(peptides_proteins$peptide_sequence,function(X){index<-str_which(fasta,X);if(length(index)==1){return(index)}else{return(length(fasta)+1)}}, cl=cores)]
+  datl<-merge(merge(peptides_proteins, datm, by="peptide_sequence"), genes_proteins, by="protein_id")
+
+  # map phosphosites
+  message("Mapping phosphopeptide sites")
+  site_mapping<-as.data.table(ddply(unique(datl[,c("gene_id","protein_id","modified_peptide_sequence")]),.(modified_peptide_sequence),function(X){convert_sites(fasta,X$gene_id,X$protein_id,X$modified_peptide_sequence)}))
+  site_mapping<-merge(site_mapping, unique(datl[,c("gene_id","protein_id","peptide_id","peptide_sequence","modified_peptide_sequence")]),by="modified_peptide_sequence")
+
+  # merge meta and quantitative data
+  datl<-merge(datl, datq, by="peptide_id")
+
+  # generate matrix
+  datmx<-dcast(unique(datl[,c("peptide_id","run_id","peptide_intensity")]), peptide_id ~ run_id, value.var = "peptide_intensity")
+
+  # get annotation
+  rowids<-datmx$peptide_id
+  colids<-colnames(datmx[,-1])
+  datmx<-as.matrix(datmx[,-1])
+  datmx[datmx == 0]<-NA
+
+  # normalize matrix
+  datmxn<-log10(datmx)
+  # datmxn<-log10(normalize.quantiles(datmx))
+  colnames(datmxn)<-colids
+  datmxn<-data.table(datmxn)
+  datmxn$peptide_id<-rowids
+
+  datln<-melt(datmxn, id.vars="peptide_id", variable.name="run_id", value.name="peptide_intensity")
+
+  datl<-merge(datln, site_mapping,by="peptide_id", allow.cartesian=TRUE)
+
+  return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
+}
+
+#' Import protein MaxQuant proteinGroups TXT file
+#'
+#' This function imports a protein MaxQuant proteinGroups TXT file and converts the data to the unified phosphoviper format
+#'
+#' @param file protein MaxQuant proteinGroups TXT file
 #' @param fasta Amino acid FASTA file from UniProt
 #' @param cores Integer indicating the number of cores to use (only 1 in Windows-based systems)
 #' @return peptide-level phosphoviper data.table
@@ -336,7 +467,57 @@ importSpectronaut<-function(file, fasta, run_ids, cores = 1) {
 #' @import pbapply
 #' @import preprocessCore
 #' @export
-importMaxQuant<-function(file, fasta, cores = 1) {
+importProteoMaxQuant<-function(file, fasta, cores = 1) {
+
+  # load reference fasta library
+  message("Loading FASTA DB")
+  fasta<-read.fasta(fasta, seqtype="AA", as.string = TRUE, set.attributes = FALSE)
+  genes_proteins<-data.table("gene_id"=as.vector(sapply(names(fasta),function(X){strsplit(strsplit(X,"\\|")[[1]][3],"_")[[1]][1]})), "protein_id"=as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]})))
+
+  # load MaxQuant data
+  message("Loading MaxQuant data")
+  dat<-fread(file)
+
+  # parse run identifiers
+  run_ids<-colnames(dat)[str_detect(colnames(dat),"Intensity ")]
+
+  dat<-dat[,c("Protein IDs","Number of proteins", run_ids),with = FALSE]
+  colnames(dat)<-c("protein_id","n_proteins",str_replace(run_ids,"Intensity ",""))
+
+  # proteotypic peptides only
+  dat<-subset(dat, n_proteins==1)[,c("protein_id", str_replace(run_ids,"Intensity ","")),with = FALSE]
+
+  datl<-melt(dat, id.vars="protein_id", variable.name="run_id", value.name="peptide_intensity")
+  datl<-subset(datl, !is.na(peptide_intensity) & peptide_intensity > 0)
+
+  datl<-merge(datl, genes_proteins,by="protein_id", allow.cartesian=TRUE)
+
+  datl$peptide_id<-datl$protein_id
+  datl$modified_peptide_sequence<-datl$protein_id
+  datl$peptide_sequence<-datl$protein_id
+  datl$phosphosite<-"PA"
+  datl$site_id<-paste(datl$gene_id,datl$protein_id,datl$phosphosite,sep=":")
+  datl$peptide_intensity<-log10(datl$peptide_intensity)
+
+  return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
+}
+
+#' Import phospho MaxQuant Evidence TXT file
+#'
+#' This function imports a phospho MaxQuant Evidence TXT file and converts the data to the unified phosphoviper format
+#'
+#' @param file phospho MaxQuant Evidence TXT file
+#' @param fasta Amino acid FASTA file from UniProt
+#' @param cores Integer indicating the number of cores to use (only 1 in Windows-based systems)
+#' @return peptide-level phosphoviper data.table
+#' @import data.table
+#' @importFrom plyr ddply .
+#' @import seqinr
+#' @import stringr
+#' @import pbapply
+#' @import preprocessCore
+#' @export
+importPhosphoMaxQuant<-function(file, fasta, cores = 1) {
 
   # load reference fasta library
   message("Loading FASTA DB")
@@ -348,7 +529,11 @@ importMaxQuant<-function(file, fasta, cores = 1) {
   message("Loading MaxQuant data")
   dat<-fread(file)
 
-  if ("Modified sequence" %in% colnames(dat)) {
+  legacy_mode<-FALSE
+  if (!("Experiment" %in% colnames(dat))) {
+    colids<-c("Modified sequence","Charge","Raw file","Intensity","PEP")
+    legacy_mode<-TRUE
+  } else if ("Modified sequence" %in% colnames(dat)) {
     colids<-c("Modified sequence","Charge","Experiment","Intensity","PEP")
   } else {
     colids<-c("Modified Sequence","Charge","Experiment","Intensity","PEP")
@@ -362,7 +547,11 @@ importMaxQuant<-function(file, fasta, cores = 1) {
   dat$peptide_id<-paste(dat$peptide_id,dat$precursor_charge,sep=".")
 
   # map peptides to proteins
-  dat$modified_peptide_sequence<-replace_mq_ptms(dat$modified_peptide_sequence)
+  if (legacy_mode) {
+    dat$modified_peptide_sequence<-replace_oldmq_ptms(dat$modified_peptide_sequence)
+  } else {
+    dat$modified_peptide_sequence<-replace_mq_ptms(dat$modified_peptide_sequence)
+  }
   dat$peptide_sequence<-str_to_upper(strip_ptms(dat$modified_peptide_sequence))
   dat<-subset(dat, peptide_sequence != modified_peptide_sequence)
   peptides_proteins<-data.table("peptide_sequence"=unique(dat$peptide_sequence))

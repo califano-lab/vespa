@@ -9,8 +9,8 @@ hparacne2regulon(
   pfile,
   mfile = NA,
   method = "spearman",
-  confidence_threshold = 0,
-  priors = TRUE,
+  likelihood_threshold = 0.5,
+  priors = FALSE,
   verbose = TRUE
 )
 }
@@ -23,11 +23,11 @@ hparacne2regulon(
 
 \item{method}{Correlation method for TFmode refinement}
 
-\item{confidence_threshold}{Interaction confidence_threshold}
+\item{likelihood_threshold}{Interaction confidence threshold to filter likelihood}
 
-\item{priors}{Logical, whether prior interaction probabilities should be used.}
+\item{priors}{Logical, whether prior interaction probabilities should be used as weights for likelihood}
 
-\item{verbose}{Logical, whether progression messages should be printed in the terminal.}
+\item{verbose}{Logical, whether progression messages should be printed in the terminal}
 }
 \description{
 This function imports a hpARACNe network and generates site-specific regulons

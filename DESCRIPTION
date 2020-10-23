@@ -17,11 +17,8 @@ Imports:
     pbapply,
     plyr,
     preprocessCore,
-    pROC,
-    reshape,
     reshape2,
     seqinr,
     stringr,
     sva,
-    tidyr,
-    viper
+    tidyr
