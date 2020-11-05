@@ -175,7 +175,7 @@ optimizeRegulon <- function(ges, net.list, min_size=25, pleiotropy=FALSE, pleiot
 
     selected_regulon<-net.list[[row.names(w.mat)[which.max(w.mat)]]][[g]]
     if (is.na(as.numeric(names(net.list)[1]))) {
-      selected_regulon$origin<-row.names(w.mat)[which.max(w.mat)]
+      selected_regulon$meta$origin<-row.names(w.mat)[which.max(w.mat)]
     }
 
     return(selected_regulon)
@@ -238,7 +238,7 @@ TFmode1 <- function (regulon, expset, method = "spearman") {
   cmat <- cor(t(expset[rownames(expset) %in% tf, ]), t(expset[rownames(expset) %in% tg, ]), method = method)
   reg <- lapply(1:length(regulon), function(i, regulon, cmat) {
     tfscore <- cmat[which(rownames(cmat) == names(regulon)[i]), match(names(regulon[[i]]$tfmode), colnames(cmat))]
-    list(tfmode = tfscore, likelihood = regulon[[i]]$likelihood)
+    list(tfmode = tfscore, likelihood = regulon[[i]]$likelihood, meta = regulon[[i]]$meta)
   }, regulon = regulon, cmat = cmat)
   names(reg) <- names(regulon)
   return(reg)
@@ -335,7 +335,7 @@ hparacne2regulon<-function(afile, pfile, mfile=NA, method="spearman", likelihood
   }
 
   # Generate raw regulon
-  regulons<-dlply(aracne,.(Regulator),function(X){tfmode<-X$Correlation;names(tfmode)<-X$Target;return(list("tfmode"=tfmode, "likelihood"=X$likelihood))})
+  regulons<-dlply(aracne,.(Regulator),function(X){tfmode<-X$Correlation;names(tfmode)<-X$Target;return(list("tfmode"=tfmode, "likelihood"=X$likelihood, "meta"=list("regulator"=unique(X$Regulator), "dataset"=afile)))})
 
   # Compute new TFmode if quantitative matrix is present
   if (!is.na(mfile)) {
@@ -450,7 +450,7 @@ site2gene<-function(regulons) {
 #' @param min_size minimum regulon size
 #' @export
 subsetRegulon<-function(regulons,targets,min_size=10) {
-  subregulon<-lapply(regulons,function(X){ids<-which(names(X$tfmode) %in% targets);if(length(ids)>min_size){return(list("tfmode"=X$tfmode[ids], "likelihood"=X$likelihood[ids], "origin"=X$origin[ids]))}})
+  subregulon<-lapply(regulons,function(X){ids<-which(names(X$tfmode) %in% targets);if(length(ids)>min_size){return(list("tfmode"=X$tfmode[ids], "likelihood"=X$likelihood[ids], "meta"=X$meta))}})
 
   return(subregulon[sapply(subregulon,length)>0])
 }
@@ -485,14 +485,14 @@ pruneRegulon <- function(regulon, cutoff=50, adaptive=TRUE, eliminate=FALSE, wm=
       pos <- order(likelihood, decreasing=TRUE)
       ws <- (likelihood/max(likelihood))^2
       pos <- pos[cumsum(ws[pos])<=cutoff]
-      return(list(tfmode=x$tfmode[pos], likelihood=x$likelihood[pos], origin=x$origin[pos]))
+      return(list(tfmode=x$tfmode[pos], likelihood=x$likelihood[pos], meta=x$meta))
     }, cutoff=cutoff, wm=wm)
   }
   else {
     regulon <- lapply(regulon, function(x, cutoff) {
       pos <- order(x$likelihood, decreasing=TRUE)
       pos <- pos[1:min(length(pos), cutoff)]
-      return(list(tfmode=x$tfmode[pos], likelihood=x$likelihood[pos], origin=x$origin[pos]))
+      return(list(tfmode=x$tfmode[pos], likelihood=x$likelihood[pos], meta=x$meta))
     }, cutoff=cutoff)
     if (eliminate) regulon <- regulon[sapply(regulon, function(x) length(x$tfmode))>=cutoff]
   }
