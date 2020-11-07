@@ -7,13 +7,9 @@
 importOpenSWATH(
   file,
   fasta,
-  batchfile,
-  cores = 1,
   normalization_method = FALSE,
-  batchcorrection = FALSE,
-  batchsubset = FALSE,
-  batchlevel = c("protein_id", "peptide_id"),
-  min_detections = 10
+  batchfile,
+  cores = 1
 )
 }
 \arguments{
@@ -21,15 +17,11 @@ importOpenSWATH(
 
 \item{fasta}{Amino acid FASTA file from UniProt}
 
-\item{batchfile}{A data.table with batch correction annotation (columns: run_id, tag, aggregator_id, ds_id)}
-
-\item{cores}{Integer indicating the number of cores to use (only 1 in Windows-based systems)}
-
 \item{normalization_method}{Either "FALSE" (skip normalization), "quantile" or "cyclicLoess" normalization}
 
-\item{batchcorrection}{Whether batch subsetting should be conducted}
+\item{batchfile}{A data.table with tags (replacement for run_id) and batch annotation for separate normalization (columns: run_id, tag, aggregator_id, ds_id)}
 
-\item{batchlevel}{Minimum number of peptide detections across samples}
+\item{cores}{Integer indicating the number of cores to use}
 }
 \value{
 peptide-level phosphoviper data.table

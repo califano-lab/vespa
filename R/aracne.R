@@ -235,7 +235,7 @@ TFmode1 <- function (regulon, expset, method = "spearman") {
   }, genes = rownames(expset))
   tf <- unique(names(regulon))
   tg <- unique(unlist(lapply(regulon, function(x) names(x$tfmode)), use.names = FALSE))
-  cmat <- cor(t(expset[rownames(expset) %in% tf, ]), t(expset[rownames(expset) %in% tg, ]), method = method)
+  cmat <- cor(t(expset[rownames(expset) %in% tf, ]), t(expset[rownames(expset) %in% tg, ]), use="pairwise.complete.obs", method = method)
   reg <- lapply(1:length(regulon), function(i, regulon, cmat) {
     tfscore <- cmat[which(rownames(cmat) == names(regulon)[i]), match(names(regulon[[i]]$tfmode), colnames(cmat))]
     list(tfmode = tfscore, likelihood = regulon[[i]]$likelihood, meta = regulon[[i]]$meta)
@@ -331,7 +331,6 @@ hparacne2regulon<-function(afile, pfile, mfile=NA, method="spearman", likelihood
     mx[,site_id:=NULL]
     mx<-as.matrix(mx)
     rownames(mx)<-mx_ids
-    mx[which(is.na(mx))]<-0
   }
 
   # Generate raw regulon
