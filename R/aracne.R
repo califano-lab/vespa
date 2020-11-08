@@ -88,17 +88,18 @@ export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions=
 #' This function exports tables in the unified phosphoviper format to a matrix
 #'
 #' @param datl Unified phosphoviper format
+#' @param fillvalues Missing value imputation method ("rowmin": Row-wise (peptide) minimum; "colmin": Column-wise (run) minimum; NULL: Skip and use NA)
 #' @return matrix
 #' @import data.table
 #' @export
-export2mx<-function(datl) {
+export2mx<-function(datl, fillvalues="rowmin") {
   # reduce data to top peptide query per phosphosite
   pqp_freq<-data.table(merge(unique(datl[,c("site_id","peptide_id")]), as.data.frame(table(datl$peptide_id),stringsAsFactors = FALSE), by.x="peptide_id", by.y="Var1"))
   pqp_top<-pqp_freq[pqp_freq[, .I[which.max(Freq)], by=site_id]$V1]
   datl<-merge(datl, pqp_top[,c("site_id","peptide_id"),which=FALSE], by=c("site_id","peptide_id"))
 
   # generate matrix
-  datm<-dcast(data.table(unique(datl[,c("site_id","run_id","peptide_intensity")])), site_id ~ run_id, value.var = "peptide_intensity")
+  datm<-data.table::dcast(data.table(unique(datl[,c("site_id","run_id","peptide_intensity")])), site_id ~ run_id, value.var = "peptide_intensity")
 
   # get annotation
   phosphoExp<-as.matrix(datm[,-1])
@@ -106,7 +107,30 @@ export2mx<-function(datl) {
 
   rownames(phosphoExp)<-datm$site_id
 
+  # fill missing values
+  if (is.numeric(fillvalues)) {
+    phosphoExp[is.na(phosphoExp)]<-fillvalues
+  } else if (fillvalues=="rowmin") {
+    # fill missing values row-wise
+    phosphoExp<-t(apply(phosphoExp,1,function(X){X[is.na(X)]<-min(X,na.rm=TRUE); return(X);}))
+  } else if (fillvalues=="colmin") {
+    phosphoExp<-apply(phosphoExp,2,function(X){X[is.na(X)]<-min(X,na.rm=TRUE); return(X);})
+  }
+
   return(phosphoExp)
+}
+
+preprocess_mx<-function(osw, ed) {
+  # preprocess peptides
+  oswf<-merge(data.table(osw), ed[,c("tag","cl_tag","time_tag","compound_tag")], by.x="run_id", by.y="tag")
+  oswf<-unique(oswf[,c("peptide_id","run_id","peptide_intensity","cl_tag","time_tag","compound_tag")])
+  oswf<-merge(data.table(oswf), merge(data.table(expand.grid(peptide_id = unique(oswf$peptide_id), run_id = unique(oswf$run_id))), unique(ed[,c("tag","cl_tag","time_tag","compound_tag")]), by.x="run_id", by.y="tag"), by=c("peptide_id","run_id","cl_tag","time_tag","compound_tag"), all=TRUE)
+
+  oswf[, peptide_intensity := nafill(peptide_intensity, type = "const", fill=min(peptide_intensity, na.rm=TRUE)), key="peptide_id"]
+
+  oswm<-merge(data.table(unique(osw[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite")])),data.table(unique(oswf[,c("peptide_id","run_id","peptide_intensity")])), by="peptide_id", allow.cartesian=TRUE)
+
+  return(oswm)
 }
 
 #' Export to unified phosphoviper format from viper matrix

@@ -4,10 +4,12 @@
 \alias{export2mx}
 \title{Export to matrix}
 \usage{
-export2mx(datl)
+export2mx(datl, fillvalues = "rowmin")
 }
 \arguments{
 \item{datl}{Unified phosphoviper format}
+
+\item{fillvalues}{Missing value imputation method ("rowmin": Row-wise (peptide) minimum; "colmin": Column-wise (run) minimum; NULL: Skip and use NA)}
 }
 \value{
 matrix
