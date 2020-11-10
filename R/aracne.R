@@ -92,7 +92,7 @@ export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions=
 #' @return matrix
 #' @import data.table
 #' @export
-export2mx<-function(datl, fillvalues="rowmin") {
+export2mx<-function(datl, fillvalues=NA) {
   # reduce data to top peptide query per phosphosite
   pqp_freq<-data.table(merge(unique(datl[,c("site_id","peptide_id")]), as.data.frame(table(datl$peptide_id),stringsAsFactors = FALSE), by.x="peptide_id", by.y="Var1"))
   pqp_top<-pqp_freq[pqp_freq[, .I[which.max(Freq)], by=site_id]$V1]
@@ -108,13 +108,15 @@ export2mx<-function(datl, fillvalues="rowmin") {
   rownames(phosphoExp)<-datm$site_id
 
   # fill missing values
-  if (is.numeric(fillvalues)) {
+  if (is.na(fillvalues) || is.null(fillvalues)) {
     phosphoExp[is.na(phosphoExp)]<-fillvalues
   } else if (fillvalues=="rowmin") {
     # fill missing values row-wise
     phosphoExp<-t(apply(phosphoExp,1,function(X){X[is.na(X)]<-min(X,na.rm=TRUE); return(X);}))
   } else if (fillvalues=="colmin") {
     phosphoExp<-apply(phosphoExp,2,function(X){X[is.na(X)]<-min(X,na.rm=TRUE); return(X);})
+  } else {
+    phosphoExp[is.na(phosphoExp)]<-fillvalues
   }
 
   return(phosphoExp)

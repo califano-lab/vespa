@@ -5,6 +5,16 @@ replace_sanger_ptms<-function(X){
   return(X)
 }
 
+replace_tpp_ptms<-function(X){
+  X<-str_replace_all(X,"S\\[79.9663\\]","s")
+  X<-str_replace_all(X,"T\\[79.9663\\]","t")
+  X<-str_replace_all(X,"Y\\[79.9663\\]","y")
+  X<-str_replace_all(X,"n\\[42.0106\\]","")
+  X<-str_replace_all(X,"\\.","")
+  X<-gsub("\\s*\\[[^\\)]+\\]","",as.character(X))
+  return(X)
+}
+
 replace_spectronaut_ptms<-function(X){
   X<-str_replace_all(X,"S\\[Phospho \\(STY\\)\\]","s")
   X<-str_replace_all(X,"T\\[Phospho \\(STY\\)\\]","t")
@@ -254,6 +264,72 @@ importSpectronaut<-function(file, fasta, run_ids, cores = 1) {
   datln<-melt(datmxn, id.vars="peptide_id", variable.name="run_id", value.name="peptide_intensity")
 
   datl<-merge(datln, site_mapping,by="peptide_id", allow.cartesian=TRUE)
+
+  return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
+}
+
+#' Import IonQuant file
+#'
+#' This function imports a IonQuant MSstats.tsv file and converts the data to the unified phosphoviper format
+#'
+#' @param file IonQuant MSstats.tsv file
+#' @param fasta Amino acid FASTA file from UniProt
+#' @param normalization_method Either "FALSE" (skip normalization), "quantile" or "cyclicLoess" normalization
+#' @param batchfile A data.table with tags (replacement for run_id) and batch annotation for separate normalization (columns: run_id, tag, aggregator_id, ds_id)
+#' @param cores Integer indicating the number of cores to use
+#' @return peptide-level phosphoviper data.table
+#' @import data.table
+#' @importFrom plyr ddply .
+#' @import seqinr
+#' @import stringr
+#' @import pbapply
+#' @import preprocessCore
+#' @importFrom limma normalizeCyclicLoess
+#' @export
+importIonQuant<-function(file, fasta, normalization_method = FALSE, batchfile, cores = 1) {
+  # load reference fasta library
+  message("Loading FASTA DB")
+  fasta<-read.fasta(fasta, seqtype="AA", as.string = TRUE, set.attributes = FALSE)
+  genes_proteins<-data.table("gene_id"=as.vector(sapply(names(fasta),function(X){strsplit(strsplit(X,"\\|")[[1]][3],"_")[[1]][1]})), "protein_id"=as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]})))
+  names(fasta)<-as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]}))
+
+  # load IonQuant data
+  message("Loading IonQuant data")
+  dat<-fread(file)[,c("PeptideSequence","PrecursorCharge","Run","Intensity")]
+  names(dat)<-c("modified_peptide_sequence","precursor_charge","run_id","peptide_intensity")
+  dat<-subset(dat, !is.na(peptide_intensity))
+  dat$peptide_id<-paste(dat$modified_peptide_sequence,dat$precursor_charge,sep="_")
+
+  # append tag identifier
+  dat<-merge(dat, batchfile[,c("run_id","tag")], by="run_id", allow.cartesian=TRUE)
+  dat$run_id<-dat$tag
+
+  # map peptides to proteins
+  dat$phospho_peptide_sequence<-replace_tpp_ptms(dat$modified_peptide_sequence)
+  dat$peptide_sequence<-str_to_upper(dat$phospho_peptide_sequence)
+  # dat<-subset(dat, peptide_sequence != modified_peptide_sequence)
+  peptides_proteins<-data.table("peptide_sequence"=unique(dat$peptide_sequence))
+  message("Mapping IonQuant peptides to FASTA")
+  peptides_proteins$protein_id<-names(fasta)[pbsapply(peptides_proteins$peptide_sequence,function(X){index<-str_which(fasta,X);if(length(index)==1){return(index)}else{return(length(fasta)+1)}}, cl=cores)]
+  datl<-merge(merge(peptides_proteins, dat, by="peptide_sequence"), genes_proteins, by="protein_id")
+
+  # map phosphosites
+  message("Mapping phosphopeptide sites")
+  site_mapping<-as.data.table(ddply(unique(datl[,c("gene_id","protein_id","phospho_peptide_sequence")]),.(phospho_peptide_sequence),function(X){convert_sites(fasta,X$gene_id,X$protein_id,X$phospho_peptide_sequence)}))
+  site_mapping<-merge(site_mapping, unique(datl[,c("gene_id","protein_id","peptide_id","peptide_sequence","modified_peptide_sequence","phospho_peptide_sequence")]),by="phospho_peptide_sequence")
+
+  # normalize data
+  if ("aggregator_id" %in% colnames(batchfile)) {
+    datln<-ddply(batchfile,.(aggregator_id),function(X){return(normalize_pvt(subset(datl, tag %in% X$tag), normalization_method))})
+  }
+  else {
+    datln<-normalize_pvt(datl, normalization_method)
+  }
+
+  datl<-merge(datln, site_mapping,by="peptide_id", allow.cartesian=TRUE)
+
+  datl<-subset(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","tag","peptide_intensity")],!is.na(peptide_intensity))
+  names(datl)<-c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")
 
   return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
 }

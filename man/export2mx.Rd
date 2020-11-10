@@ -4,7 +4,7 @@
 \alias{export2mx}
 \title{Export to matrix}
 \usage{
-export2mx(datl, fillvalues = "rowmin")
+export2mx(datl, fillvalues = NA)
 }
 \arguments{
 \item{datl}{Unified phosphoviper format}
