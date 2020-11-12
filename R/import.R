@@ -270,9 +270,9 @@ importSpectronaut<-function(file, fasta, run_ids, cores = 1) {
 
 #' Import IonQuant file
 #'
-#' This function imports a IonQuant MSstats.tsv file and converts the data to the unified phosphoviper format
+#' This function imports an IonQuant mbr_ion.tsv or MSstats.csv file and converts the data to the unified phosphoviper format
 #'
-#' @param file IonQuant MSstats.tsv file
+#' @param file IonQuant mbr_ion.tsv or MSstats.csv file
 #' @param fasta Amino acid FASTA file from UniProt
 #' @param normalization_method Either "FALSE" (skip normalization), "quantile" or "cyclicLoess" normalization
 #' @param batchfile A data.table with tags (replacement for run_id) and batch annotation for separate normalization (columns: run_id, tag, aggregator_id, ds_id)
@@ -294,9 +294,21 @@ importIonQuant<-function(file, fasta, normalization_method = FALSE, batchfile, c
   names(fasta)<-as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]}))
 
   # load IonQuant data
-  message("Loading IonQuant data")
-  dat<-fread(file)[,c("PeptideSequence","PrecursorCharge","Run","Intensity")]
-  names(dat)<-c("modified_peptide_sequence","precursor_charge","run_id","peptide_intensity")
+  dat<-fread(file)
+  if ("PeptideSequence" %in% colnames(dat)) {
+    message("Loading IonQuant MSstats.csv data")
+    dat<-dat[,c("PeptideSequence","PrecursorCharge","Run","Intensity")]
+    names(dat)<-c("modified_peptide_sequence","precursor_charge","run_id","peptide_intensity")
+    dat$pep<-0
+  } else if ("modified_peptide" %in% colnames(dat)) {
+    message("Loading IonQuant mbr_ion.tsv data")
+    dat<-fread(file)[,c("modified_peptide","charge","acceptor_run_name","probability","intensity")]
+    names(dat)<-c("modified_peptide_sequence","precursor_charge","run_id","pep","peptide_intensity")
+    dat$pep<-(1-dat$pep)
+  } else {
+    stop("Error: IonQuant file format unknown")
+  }
+
   dat<-subset(dat, !is.na(peptide_intensity))
   dat$peptide_id<-paste(dat$modified_peptide_sequence,dat$precursor_charge,sep="_")
 
@@ -326,12 +338,12 @@ importIonQuant<-function(file, fasta, normalization_method = FALSE, batchfile, c
     datln<-normalize_pvt(datl, normalization_method)
   }
 
-  datl<-merge(datln, site_mapping,by="peptide_id", allow.cartesian=TRUE)
+  datl<-merge(merge(datln, unique(datl[,c("peptide_id","tag","pep")]), by=c("peptide_id","tag")), site_mapping,by="peptide_id", allow.cartesian=TRUE)
 
-  datl<-subset(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","tag","peptide_intensity")],!is.na(peptide_intensity))
-  names(datl)<-c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")
+  datl<-subset(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","tag","peptide_intensity","pep")],!is.na(peptide_intensity))
+  names(datl)<-c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity","pep")
 
-  return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
+  return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity","pep")])
 }
 
 #' Import protein Progenesis TXT file

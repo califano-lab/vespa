@@ -7,7 +7,7 @@
 importIonQuant(file, fasta, normalization_method = FALSE, batchfile, cores = 1)
 }
 \arguments{
-\item{file}{IonQuant MSstats.tsv file}
+\item{file}{IonQuant mbr_ion.tsv or MSstats.csv file}
 
 \item{fasta}{Amino acid FASTA file from UniProt}
 
@@ -21,5 +21,5 @@ importIonQuant(file, fasta, normalization_method = FALSE, batchfile, cores = 1)
 peptide-level phosphoviper data.table
 }
 \description{
-This function imports a IonQuant MSstats.tsv file and converts the data to the unified phosphoviper format
+This function imports an IonQuant mbr_ion.tsv or MSstats.csv file and converts the data to the unified phosphoviper format
 }

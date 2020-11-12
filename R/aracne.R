@@ -208,7 +208,6 @@ optimizeRegulon <- function(ges, net.list, min_size=25, pleiotropy=FALSE, pleiot
   }
 
   num.nets <- length(net.list)
-  num.samps <- ncol(ges)
 
   ## run VIPER with each network
   print('Generating VIPER matrices...')
@@ -218,6 +217,8 @@ optimizeRegulon <- function(ges, net.list, min_size=25, pleiotropy=FALSE, pleiot
  = pleiotropyArgs)
   }
   names(vip.list) <- names(net.list)
+
+  num.samps <- ncol(vip.list[[1]])
 
   ## select best regulon for each gene
   message("")
