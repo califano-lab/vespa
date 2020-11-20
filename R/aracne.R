@@ -235,44 +235,6 @@ optimizeRegulon <- function(ges, net.list, min_size=25, pleiotropy=FALSE, pleiot
 
 #' Copied from VIPER package
 #'
-updateRegulon <- function(regul) {
-  if (is.null(names(regul[[1]]))) {
-    tmp <- lapply(regul, function(x) {
-      tmp <- rep(0, length(x))
-      names(tmp) <- x
-      list(tfmode=tmp, likelihood=rep(1, length(tmp)))
-    })
-    return(tmp)
-  }
-  if (names(regul[[1]])[1]=="tfmode") return(regul)
-  return(lapply(regul, function(x) list(tfmode=x, likelihood=rep(1, length(x)))))
-}
-
-#' Copied from VIPER package
-#'
-TFmode1 <- function (regulon, expset, method = "spearman") {
-  regulon <- updateRegulon(regulon)
-  regulon <- regulon[names(regulon) %in% rownames(expset)]
-  regulon <- lapply(regulon, function(x, genes) {
-    filtro <- names(x$tfmode) %in% genes
-    x$tfmode <- x$tfmode[filtro]
-    if (length(x$likelihood) == length(filtro))
-      x$likelihood <- x$likelihood[filtro]
-    return(x)
-  }, genes = rownames(expset))
-  tf <- unique(names(regulon))
-  tg <- unique(unlist(lapply(regulon, function(x) names(x$tfmode)), use.names = FALSE))
-  cmat <- cor(t(expset[rownames(expset) %in% tf, ]), t(expset[rownames(expset) %in% tg, ]), use="pairwise.complete.obs", method = method)
-  reg <- lapply(1:length(regulon), function(i, regulon, cmat) {
-    tfscore <- cmat[which(rownames(cmat) == names(regulon)[i]), match(names(regulon[[i]]$tfmode), colnames(cmat))]
-    list(tfmode = tfscore, likelihood = regulon[[i]]$likelihood, meta = regulon[[i]]$meta)
-  }, regulon = regulon, cmat = cmat)
-  names(reg) <- names(regulon)
-  return(reg)
-}
-
-#' Copied from VIPER package
-#'
 #' @importFrom mixtools normalmixEM
 TFscore <- function (regul, mu = NULL, sigma = NULL, verbose=TRUE) {
   if (length(mu) == 3 & length(sigma) == 3)
@@ -304,15 +266,13 @@ TFscore <- function (regul, mu = NULL, sigma = NULL, verbose=TRUE) {
 #'
 #' @param afile hpARACNe network file
 #' @param pfile hpARACNe peptides file
-#' @param mfile Optional hpARACNe quantitative matrix file for TFmode refinement
-#' @param method Correlation method for TFmode refinement
 #' @param likelihood_threshold Interaction confidence threshold to filter likelihood
 #' @param priors Logical, whether prior interaction probabilities should be used as weights for likelihood
 #' @param verbose Logical, whether progression messages should be printed in the terminal
 #' @import data.table
 #' @importFrom plyr dlply .
 #' @export
-hparacne2regulon<-function(afile, pfile, mfile=NA, method="spearman", likelihood_threshold=0.5, priors=FALSE, verbose=TRUE) {
+hparacne2regulon<-function(afile, pfile, likelihood_threshold=0.5, priors=FALSE, verbose=TRUE) {
   aracne<-fread(afile)
   if (!("Prior" %in% names(aracne))) {
     aracne$Prior<-NA
@@ -345,28 +305,8 @@ hparacne2regulon<-function(afile, pfile, mfile=NA, method="spearman", likelihood
   # Remove interactions below threshold
   aracne<-subset(aracne, likelihood > likelihood_threshold)
 
-  # Parse quantitative matrix if specified
-  if (class(mfile)=="matrix") {
-    mx<-mfile
-    aracne<-subset(aracne, Regulator %in% rownames(mx) & Target %in% rownames(mx))
-  }
-  else if (!is.na(mfile)) {
-    mx<-fread(mfile)
-    mx<-merge(mx,peptides[,c("peptide_id","site_id"), with = FALSE], by="peptide_id", allow.cartesian=TRUE)
-    mx_ids<-mx$site_id
-    mx[,peptide_id:=NULL]
-    mx[,site_id:=NULL]
-    mx<-as.matrix(mx)
-    rownames(mx)<-mx_ids
-  }
-
   # Generate raw regulon
   regulons<-dlply(aracne,.(Regulator),function(X){tfmode<-X$Correlation;names(tfmode)<-X$Target;return(list("tfmode"=tfmode, "likelihood"=X$likelihood, "meta"=list("regulator"=unique(X$Regulator), "dataset"=afile)))})
-
-  # Compute new TFmode if quantitative matrix is present
-  if (!is.na(mfile)) {
-    regulons<-TFmode1(regulons, mx, method)
-  }
 
   # Remove missing data
   regulons <- regulons[names(regulons) != "NA"]

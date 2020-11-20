@@ -7,8 +7,6 @@
 hparacne2regulon(
   afile,
   pfile,
-  mfile = NA,
-  method = "spearman",
   likelihood_threshold = 0.5,
   priors = FALSE,
   verbose = TRUE
@@ -18,10 +16,6 @@ hparacne2regulon(
 \item{afile}{hpARACNe network file}
 
 \item{pfile}{hpARACNe peptides file}
-
-\item{mfile}{Optional hpARACNe quantitative matrix file for TFmode refinement}
-
-\item{method}{Correlation method for TFmode refinement}
 
 \item{likelihood_threshold}{Interaction confidence threshold to filter likelihood}
 

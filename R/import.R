@@ -312,6 +312,10 @@ importIonQuant<-function(file, fasta, normalization_method = FALSE, batchfile, c
   dat<-subset(dat, !is.na(peptide_intensity))
   dat$peptide_id<-paste(dat$modified_peptide_sequence,dat$precursor_charge,sep="_")
 
+  # select best scoring peptide per run if multiple are available
+  message("Selecting peptides")
+  dat<-ddply(dat,.(peptide_id, run_id),function(X){return(X[which(X$pep==min(X$pep))[1],])})
+
   # append tag identifier
   dat<-merge(dat, batchfile[,c("run_id","tag")], by="run_id", allow.cartesian=TRUE)
   dat$run_id<-dat$tag
