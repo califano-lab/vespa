@@ -7,7 +7,7 @@
 hparacne2regulon(
   afile,
   pfile,
-  likelihood_threshold = 0.5,
+  likelihood_threshold = 0,
   priors = FALSE,
   verbose = TRUE
 )

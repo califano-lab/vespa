@@ -9,10 +9,11 @@
 #' @param interactions HSM/D or HSM/P Interaction table (UniProtKB)
 #' @param target_sites (Optional) list of target sites to restrict dataset (PV site_id)
 #' @param confidence_threshold Interaction confidence_threshold
+#' @param restrict_interactions Restrict interactions to kinase/phosphatase regulator-target subset
 #' @param interaction_level Interaction level ("substrate" or "activity")
 #' @import data.table
 #' @export
-export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions=NULL, target_sites=NULL, confidence_threshold=0, interaction_level="substrate") {
+export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions=NULL, target_sites=NULL, confidence_threshold=0, restrict_interactions=TRUE, interaction_level="substrate") {
   # format output directory
   dir.create(output_dir)
 
@@ -51,7 +52,7 @@ export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions=
   # write kinases + phosphatases
   write.table(unique(c(subset(regulators, protein_id %in% kinases)$peptide_id, subset(regulators, protein_id %in% phosphatases)$peptide_id)), file=file.path(output_dir,"kinases_phosphatases.txt"), quote=FALSE, col.names=FALSE, row.names=FALSE, sep="\t")
 
-  # write targets (only phosphopeptides or VIPER activity is used for targets, but not protein abundance)
+  # write targets (only phosphopeptides or VIPER activity are used for targets, but not protein abundance)
   if (!is.null(target_sites)) {
     target_ids<-unique(subset(targets, site_id %in% target_sites)$peptide_id)
   } else {
@@ -77,6 +78,10 @@ export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions=
       names(target_ppi)<-c("target","target_peptide_id")
 
       phosphointeractions<-merge(merge(subset(interactions, confidence > confidence_threshold), regulator_ppi, by="regulator", allow.cartesian=TRUE), target_ppi, by="target", allow.cartesian=TRUE)[,c("regulator_peptide_id","target_peptide_id","confidence")]
+    }
+
+    if (restrict_interactions) {
+      phosphointeractions<-subset(phosphointeractions, regulator_peptide_id %in% unique(c(subset(regulators, protein_id %in% kinases)$peptide_id, subset(regulators, protein_id %in% phosphatases)$peptide_id)))
     }
 
     write.table(phosphointeractions, file=file.path(output_dir,"phosphointeractions.txt"), quote=FALSE, row.names=FALSE, sep="\t")
@@ -272,7 +277,7 @@ TFscore <- function (regul, mu = NULL, sigma = NULL, verbose=TRUE) {
 #' @import data.table
 #' @importFrom plyr dlply .
 #' @export
-hparacne2regulon<-function(afile, pfile, likelihood_threshold=0.5, priors=FALSE, verbose=TRUE) {
+hparacne2regulon<-function(afile, pfile, likelihood_threshold=0, priors=FALSE, verbose=TRUE) {
   aracne<-fread(afile)
   if (!("Prior" %in% names(aracne))) {
     aracne$Prior<-NA
@@ -297,13 +302,16 @@ hparacne2regulon<-function(afile, pfile, likelihood_threshold=0.5, priors=FALSE,
   # Compute likelihood from MI
   aracne$likelihood<-(aracne$MI / max(aracne$MI))
 
-  # Optionally use priors as weights for likelihood
-  if (priors) {
-    aracne$likelihood<-aracne$likelihood * aracne$Prior
-  }
-
   # Remove interactions below threshold
   aracne<-subset(aracne, likelihood > likelihood_threshold)
+
+  # Optionally use priors as weights for likelihood
+  if (priors) {
+    # Normalize priors by measured maximum PBD-peptide or PPI interaction
+    aracne<-data.table(ddply(aracne,.(Regulator),function(X){data.frame("Target"=X$Target, "MI"=X$MI, "Correlation"=X$Correlation, "likelihood"=X$likelihood, "Prior"=X$Prior/max(X$Prior))}))
+
+    aracne$likelihood<-aracne$likelihood * aracne$Prior
+  }
 
   # Generate raw regulon
   regulons<-dlply(aracne,.(Regulator),function(X){tfmode<-X$Correlation;names(tfmode)<-X$Target;return(list("tfmode"=tfmode, "likelihood"=X$likelihood, "meta"=list("regulator"=unique(X$Regulator), "dataset"=afile)))})

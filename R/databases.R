@@ -36,9 +36,10 @@ loadHSMP<-function() {
   # hsmp2<-hsmp
   # names(hsmp2)<-c("target","regulator","confidence")
   # hsmp<-unique(rbind(hsmp,hsmp2))
-  # hsmd<-unique(readRDS("hsmd.rds")[,c("duid","dtype","puid")])
-  # names(hsmd)<-c("regulator","regulator_type","target")
-  # hsmp<-merge(hsmp, hsmd, by=c("regulator","target"))
+  # hsmd<-unique(readRDS("hsmd.rds")[,c("duid","dtype")])
+  # names(hsmd)<-c("regulator","regulator_type")
+  # hsmd<-ddply(hsmd,.(regulator),function(X){data.frame("regulator_type"=paste(X$regulator_type,collapse=";"))})
+  # hsmp<-merge(hsmp, hsmd, by=c("regulator"))
   # hsmp[,confidence:=max(confidence),by=c("regulator","target")]
   # hsmp<-unique(hsmp)
   # save(hsmp,file="../../code/phosphoviper/data/human_hsmp.rda")

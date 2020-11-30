@@ -12,6 +12,7 @@ export2hparacne(
   interactions = NULL,
   target_sites = NULL,
   confidence_threshold = 0,
+  restrict_interactions = TRUE,
   interaction_level = "substrate"
 )
 }
@@ -29,6 +30,8 @@ export2hparacne(
 \item{target_sites}{(Optional) list of target sites to restrict dataset (PV site_id)}
 
 \item{confidence_threshold}{Interaction confidence_threshold}
+
+\item{restrict_interactions}{Restrict interactions to kinase/phosphatase regulator-target subset}
 
 \item{interaction_level}{Interaction level ("substrate" or "activity")}
 }
