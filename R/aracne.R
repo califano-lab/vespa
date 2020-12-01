@@ -94,10 +94,11 @@ export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions=
 #'
 #' @param datl Unified phosphoviper format
 #' @param fillvalues Missing value imputation method ("rowmin": Row-wise (peptide) minimum; "colmin": Column-wise (run) minimum; NULL: Skip and use NA)
+#' @param jitter Add numerical noise to imputed missing values
 #' @return matrix
 #' @import data.table
 #' @export
-export2mx<-function(datl, fillvalues=NA) {
+export2mx<-function(datl, fillvalues=NA, jitter=TRUE) {
   # reduce data to top peptide query per phosphosite
   pqp_freq<-data.table(merge(unique(datl[,c("site_id","peptide_id")]), as.data.frame(table(datl$peptide_id),stringsAsFactors = FALSE), by.x="peptide_id", by.y="Var1"))
   pqp_top<-pqp_freq[pqp_freq[, .I[which.max(Freq)], by=site_id]$V1]
@@ -117,9 +118,17 @@ export2mx<-function(datl, fillvalues=NA) {
     phosphoExp[is.na(phosphoExp)]<-fillvalues
   } else if (fillvalues=="rowmin") {
     # fill missing values row-wise
-    phosphoExp<-t(apply(phosphoExp,1,function(X){X[is.na(X)]<-min(X,na.rm=TRUE); return(X);}))
+    if (jitter) {
+      phosphoExp<-t(apply(phosphoExp,1,function(X){ja<-diff(sort(unique(X))[1:2]); if (is.na(ja)){ja<-0}; X[is.na(X)]<-jitter(rep(min(X,na.rm=TRUE), sum(is.na(X))), amount=ja); return(X);}))
+    } else {
+      phosphoExp<-t(apply(phosphoExp,1,function(X){X[is.na(X)]<-min(X,na.rm=TRUE); return(X);}))
+    }
   } else if (fillvalues=="colmin") {
-    phosphoExp<-apply(phosphoExp,2,function(X){X[is.na(X)]<-min(X,na.rm=TRUE); return(X);})
+    if (jitter) {
+      phosphoExp<-apply(phosphoExp,2,function(X){ja<-diff(sort(unique(X))[1:2]); if (is.na(ja)){ja<-0}; X[is.na(X)]<-jitter(rep(min(X,na.rm=TRUE), sum(is.na(X))), amount=ja); return(X);})
+    } else {
+      phosphoExp<-apply(phosphoExp,2,function(X){X[is.na(X)]<-min(X,na.rm=TRUE); return(X);})
+    }
   } else {
     phosphoExp[is.na(phosphoExp)]<-fillvalues
   }
@@ -271,13 +280,11 @@ TFscore <- function (regul, mu = NULL, sigma = NULL, verbose=TRUE) {
 #'
 #' @param afile hpARACNe network file
 #' @param pfile hpARACNe peptides file
-#' @param likelihood_threshold Interaction confidence threshold to filter likelihood
-#' @param priors Logical, whether prior interaction probabilities should be used as weights for likelihood
 #' @param verbose Logical, whether progression messages should be printed in the terminal
 #' @import data.table
 #' @importFrom plyr dlply .
 #' @export
-hparacne2regulon<-function(afile, pfile, likelihood_threshold=0, priors=FALSE, verbose=TRUE) {
+hparacne2regulon<-function(afile, pfile, verbose=TRUE) {
   aracne<-fread(afile)
   if (!("Prior" %in% names(aracne))) {
     aracne$Prior<-NA
@@ -302,26 +309,19 @@ hparacne2regulon<-function(afile, pfile, likelihood_threshold=0, priors=FALSE, v
   # Compute likelihood from MI
   aracne$likelihood<-(aracne$MI / max(aracne$MI))
 
-  # Remove interactions below threshold
-  aracne<-subset(aracne, likelihood > likelihood_threshold)
-
-  # Optionally use priors as weights for likelihood
-  if (priors) {
-    # Normalize priors by measured maximum PBD-peptide or PPI interaction
-    aracne<-data.table(ddply(aracne,.(Regulator),function(X){data.frame("Target"=X$Target, "MI"=X$MI, "Correlation"=X$Correlation, "likelihood"=X$likelihood, "Prior"=X$Prior/max(X$Prior))}))
-
-    aracne$likelihood<-aracne$likelihood * aracne$Prior
-  }
+  # Normalize priors by measured maximum PBD-peptide or PPI interaction
+  aracne<-data.table(ddply(aracne,.(Regulator),function(X){data.frame("Target"=X$Target, "MI"=X$MI, "Correlation"=X$Correlation, "likelihood"=X$likelihood, "Prior"=X$Prior/max(X$Prior))}))
 
   # Generate raw regulon
-  regulons<-dlply(aracne,.(Regulator),function(X){tfmode<-X$Correlation;names(tfmode)<-X$Target;return(list("tfmode"=tfmode, "likelihood"=X$likelihood, "meta"=list("regulator"=unique(X$Regulator), "dataset"=afile)))})
+  regulons<-dlply(aracne,.(Regulator),function(X){tfmode<-X$Correlation;names(tfmode)<-X$Target;return(list("tfmode"=tfmode, "likelihood"=X$likelihood, "prior"=X$Prior, "meta"=list("regulator"=unique(X$Regulator), "dataset"=afile)))})
 
   # Remove missing data
   regulons <- regulons[names(regulons) != "NA"]
   regulons <- lapply(regulons, function(x) {
-    filtro <- !(names(x$tfmode)=="NA" | is.na(x$tfmode) | is.na(x$likelihood))
+    filtro <- !(names(x$tfmode)=="NA" | is.na(x$tfmode) | is.na(x$likelihood) | is.na(x$prior))
     x$tfmode <- x$tfmode[filtro]
     x$likelihood <- x$likelihood[filtro]
+    x$prior <- x$prior[filtro]
     return(x)
   })
   regulons <- regulons[sapply(regulons, function(x) length(names(x$tfmode)))>0]
@@ -382,7 +382,7 @@ site2protein<-function(regulons, average_regulons = TRUE) {
   # Generate list of regulons
   regulons_list<-dlply(regulon_map,.(regulon_id),function(X){subregulons<-regulons[X$site_id];names(subregulons)<-X$protein_id;subregulons<-lapply(subregulons,function(Y){ids<-names(Y$tfmode);names(Y$tfmode)<-with(id_map, protein_id[match(ids,site_id)]);return(Y)});return(subregulons)})
 
-  regulons_list_averaged<-lapply(regulons_list,function(X){lapply(X,function(Y){res<-sapply(unique(names(Y$tfmode)),function(Z){idx<-which(names(Y$tfmode)==Z);return(list("tfmode"=mean(Y$tfmode[idx]),"likelihood"=mean(Y$likelihood[idx])))});return(list("tfmode"=unlist(res[1,]),"likelihood"=unname(unlist(res[2,]))))})})
+  regulons_list_averaged<-lapply(regulons_list,function(X){lapply(X,function(Y){res<-sapply(unique(names(Y$tfmode)),function(Z){idx<-which(names(Y$tfmode)==Z);return(list("tfmode"=mean(Y$tfmode[idx]),"likelihood"=mean(Y$likelihood[idx]),"prior"=mean(Y$prior[idx])))});return(list("tfmode"=unlist(res[1,]),"likelihood"=unname(unlist(res[2,])),"prior"=unname(unlist(res[3,]))))})})
 
   if (average_regulons) {
     regulons_list_averaged = regulons_list_averaged[[1]]
@@ -401,15 +401,15 @@ site2protein<-function(regulons, average_regulons = TRUE) {
 #' @importFrom plyr dlply .
 #' @export
 site2gene<-function(regulons) {
-  regdf<-ldply(names(regulons),function(X){data.frame("site_id"=X, "target_id"=names(regulons[[X]]$tfmode), "tfmode"=regulons[[X]]$tfmode, "likelihood"=regulons[[X]]$likelihood, stringsAsFactors = FALSE)})
+  regdf<-ldply(names(regulons),function(X){data.frame("site_id"=X, "target_id"=names(regulons[[X]]$tfmode), "tfmode"=regulons[[X]]$tfmode, "likelihood"=regulons[[X]]$likelihood, "prior"=regulons[[X]]$prior, stringsAsFactors = FALSE)})
   regdf$regulator_id<-as.vector(sapply(regdf$site_id,function(X){strsplit(X,":")[[1]][1]}))
   regdf$target_id<-as.vector(sapply(regdf$target_id,function(X){strsplit(X,":")[[1]][1]}))
 
   # Average interactions
-  regdfa<-ddply(regdf[,c("regulator_id","target_id","tfmode","likelihood")],.(regulator_id, target_id),function(X){data.frame("tfmode"=mean(X$tfmode), "likelihood"=mean(X$likelihood))})
+  regdfa<-ddply(regdf[,c("regulator_id","target_id","tfmode","likelihood","prior")],.(regulator_id, target_id),function(X){data.frame("tfmode"=mean(X$tfmode), "likelihood"=mean(X$likelihood), "prior"=mean(X$prior))})
 
   # Generate regulons
-  regulons_genes<-dlply(regdfa,.(regulator_id),function(X){tfmode<-X$tfmode; names(tfmode)<-X$target_id;return(list("tfmode"=tfmode, "likelihood"=X$likelihood))})
+  regulons_genes<-dlply(regdfa,.(regulator_id),function(X){tfmode<-X$tfmode; names(tfmode)<-X$target_id;return(list("tfmode"=tfmode, "likelihood"=X$likelihood, "prior"=X$prior))})
   class(regulons_genes) <- "regulon"
 
   return(regulons_genes)
@@ -424,7 +424,7 @@ site2gene<-function(regulons) {
 #' @param min_size minimum regulon size
 #' @export
 subsetRegulon<-function(regulons,targets,min_size=10) {
-  subregulon<-lapply(regulons,function(X){ids<-which(names(X$tfmode) %in% targets);if(length(ids)>min_size){return(list("tfmode"=X$tfmode[ids], "likelihood"=X$likelihood[ids], "meta"=X$meta))}})
+  subregulon<-lapply(regulons,function(X){ids<-which(names(X$tfmode) %in% targets);if(length(ids)>min_size){return(list("tfmode"=X$tfmode[ids], "likelihood"=X$likelihood[ids], "prior"=X$prior[ids], "meta"=X$meta))}})
 
   return(subregulon[sapply(subregulon,length)>0])
 }
@@ -439,7 +439,7 @@ subsetRegulon<-function(regulons,targets,min_size=10) {
 #' @param adaptive Logical, whether adaptive size should be used (i.e. sum(likelihood^2))
 #' @param eliminate Logical whether regulons smalles than \code{cutoff} should be eliminated
 #' @param wm Optional numeric vector of weights (0; 1) for the genes
-#' @return Prunned regulon
+#' @return Pruned regulon
 #' @seealso \code{\link{viper}}, \code{\link{msviper}}
 #' @examples
 #' data(bcellViper, package="bcellViper")
@@ -447,26 +447,22 @@ subsetRegulon<-function(regulons,targets,min_size=10) {
 #' preg <- pruneRegulon(regulon, 400)
 #' hist(sapply(preg, function(x) sum(x$likelihood)/max(x$likelihood)), nclass=20)
 #' @export
-pruneRegulon <- function(regulon, cutoff=50, adaptive=TRUE, eliminate=FALSE, wm=NULL) {
+pruneRegulon <- function(regulon, cutoff=50, adaptive=TRUE, eliminate=FALSE) {
   if (adaptive) {
     regulon <- lapply(regulon, function(x, cutoff, wm) {
       likelihood <- x$likelihood
-      if (!is.null(wm)) {
-        wm <- wm[match(names(x$tfmode), names(wm))]
-        wm[is.na(wm)] <- 0
-        likelihood <- likelihood * wm
-      }
+      likelihood <- likelihood * x$prior
       pos <- order(likelihood, decreasing=TRUE)
       ws <- (likelihood/max(likelihood))^2
       pos <- pos[cumsum(ws[pos])<=cutoff]
-      return(list(tfmode=x$tfmode[pos], likelihood=x$likelihood[pos], meta=x$meta))
+      return(list(tfmode=x$tfmode[pos], likelihood=x$likelihood[pos], prior=x$prior[pos], meta=x$meta))
     }, cutoff=cutoff, wm=wm)
   }
   else {
     regulon <- lapply(regulon, function(x, cutoff) {
       pos <- order(x$likelihood, decreasing=TRUE)
       pos <- pos[1:min(length(pos), cutoff)]
-      return(list(tfmode=x$tfmode[pos], likelihood=x$likelihood[pos], meta=x$meta))
+      return(list(tfmode=x$tfmode[pos], likelihood=x$likelihood[pos], prior=x$prior[pos], meta=x$meta))
     }, cutoff=cutoff)
     if (eliminate) regulon <- regulon[sapply(regulon, function(x) length(x$tfmode))>=cutoff]
   }

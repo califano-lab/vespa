@@ -4,13 +4,7 @@
 \alias{pruneRegulon}
 \title{Prune Regulons}
 \usage{
-pruneRegulon(
-  regulon,
-  cutoff = 50,
-  adaptive = TRUE,
-  eliminate = FALSE,
-  wm = NULL
-)
+pruneRegulon(regulon, cutoff = 50, adaptive = TRUE, eliminate = FALSE)
 }
 \arguments{
 \item{regulon}{Object of class regulon}
@@ -24,7 +18,7 @@ pruneRegulon(
 \item{wm}{Optional numeric vector of weights (0; 1) for the genes}
 }
 \value{
-Prunned regulon
+Pruned regulon
 }
 \description{
 This function limits the maximum size of the regulons

@@ -4,22 +4,12 @@
 \alias{hparacne2regulon}
 \title{Import hpARACNe network}
 \usage{
-hparacne2regulon(
-  afile,
-  pfile,
-  likelihood_threshold = 0,
-  priors = FALSE,
-  verbose = TRUE
-)
+hparacne2regulon(afile, pfile, verbose = TRUE)
 }
 \arguments{
 \item{afile}{hpARACNe network file}
 
 \item{pfile}{hpARACNe peptides file}
-
-\item{likelihood_threshold}{Interaction confidence threshold to filter likelihood}
-
-\item{priors}{Logical, whether prior interaction probabilities should be used as weights for likelihood}
 
 \item{verbose}{Logical, whether progression messages should be printed in the terminal}
 }
