@@ -25,7 +25,7 @@ export2hparacne(
 
 \item{phosphatases}{List of phosphatases (UniProtKB)}
 
-\item{interactions}{HSM/D or HSM/P Interaction table (UniProtKB)}
+\item{interactions}{A named list of HSM/D, HSM/P, LPS, LPA or PCdb interaction tables (UniProtKB)}
 
 \item{target_sites}{(Optional) list of target sites to restrict dataset (PV site_id)}
 

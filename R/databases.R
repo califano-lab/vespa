@@ -92,3 +92,29 @@ loadPCdb<-function() {
   # save(pcdb,file="../../code/phosphoviper/data/human_pcdb.rda")
   data("human_pcdb")
 }
+
+#' Load human reference LinkPhinder substrate-level interactions
+#'
+#' Based on Nova´ček V, McGauran G, Matallanas D, Vallejo Blanco A, Conca P, Muñoz E, et al. (2020) Accurate prediction of kinase-substrate networks using knowledge graphs. PLoS Comput Biol 16(12): e1007578. https://doi.org/10.1371/journal. pcbi.1007578.
+#'
+#' @return Table of PPI with their scores
+#' @references \url{https://doi.org/10.1371/journal. pcbi.1007578}
+#' @export
+loadLPSdb<-function() {
+  # lpsdb<-readRDS("lps.rds")
+  # save(lpsdb,file="../../code/phosphoviper/data/human_lpsdb.rda")
+  data("human_lpsdb")
+}
+
+#' Load human reference LinkPhinder activtiy-level interactions
+#'
+#' Based on Nova´ček V, McGauran G, Matallanas D, Vallejo Blanco A, Conca P, Muñoz E, et al. (2020) Accurate prediction of kinase-substrate networks using knowledge graphs. PLoS Comput Biol 16(12): e1007578. https://doi.org/10.1371/journal. pcbi.1007578.
+#'
+#' @return Table of PPI with their scores
+#' @references \url{https://doi.org/10.1371/journal. pcbi.1007578}
+#' @export
+loadLPAdb<-function() {
+  # lpadb<-data.table(readRDS("lpa.rds"))
+  # save(lpadb,file="../../code/phosphoviper/data/human_lpadb.rda")
+  data("human_lpadb")
+}

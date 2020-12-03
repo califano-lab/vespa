@@ -6,7 +6,7 @@
 #' @param output_dir Output directory
 #' @param kinases List of kinases (UniProtKB)
 #' @param phosphatases List of phosphatases (UniProtKB)
-#' @param interactions HSM/D or HSM/P Interaction table (UniProtKB)
+#' @param interactions A named list of HSM/D, HSM/P, LPS, LPA or PCdb interaction tables (UniProtKB)
 #' @param target_sites (Optional) list of target sites to restrict dataset (PV site_id)
 #' @param confidence_threshold Interaction confidence_threshold
 #' @param restrict_interactions Restrict interactions to kinase/phosphatase regulator-target subset
@@ -62,29 +62,31 @@ export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions=
 
   # write reference interactions
   if (!is.null(interactions)) {
-    if ("site_id" %in% names(interactions)) {
-      regulator_ppi<-unique(regulators[,c("protein_id","peptide_id")])
-      names(regulator_ppi)<-c("regulator","regulator_peptide_id")
+    sapply(names(interactions), function(X){
+      if ("site_id" %in% names(interactions[[X]])) {
+        regulator_ppi<-unique(regulators[,c("protein_id","peptide_id")])
+        names(regulator_ppi)<-c("regulator","regulator_peptide_id")
 
-      target_ppi<-unique(targets[,c("site_id","peptide_id")])
-      names(target_ppi)<-c("site_id","target_peptide_id")
+        target_ppi<-unique(targets[,c("site_id","peptide_id")])
+        names(target_ppi)<-c("site_id","target_peptide_id")
 
-      phosphointeractions<-merge(merge(subset(interactions, confidence > confidence_threshold), regulator_ppi, by="regulator", allow.cartesian=TRUE), target_ppi, by="site_id", allow.cartesian=TRUE)[,c("regulator_peptide_id","target_peptide_id","confidence")]
-    } else {
-      regulator_ppi<-unique(regulators[,c("protein_id","peptide_id")])
-      names(regulator_ppi)<-c("regulator","regulator_peptide_id")
+        phosphointeractions<-merge(merge(subset(interactions[[X]], confidence > confidence_threshold), regulator_ppi, by="regulator", allow.cartesian=TRUE), target_ppi, by="site_id", allow.cartesian=TRUE)[,c("regulator_peptide_id","target_peptide_id","confidence")]
+      } else {
+        regulator_ppi<-unique(regulators[,c("protein_id","peptide_id")])
+        names(regulator_ppi)<-c("regulator","regulator_peptide_id")
 
-      target_ppi<-unique(targets[,c("protein_id","peptide_id")])
-      names(target_ppi)<-c("target","target_peptide_id")
+        target_ppi<-unique(targets[,c("protein_id","peptide_id")])
+        names(target_ppi)<-c("target","target_peptide_id")
 
-      phosphointeractions<-merge(merge(subset(interactions, confidence > confidence_threshold), regulator_ppi, by="regulator", allow.cartesian=TRUE), target_ppi, by="target", allow.cartesian=TRUE)[,c("regulator_peptide_id","target_peptide_id","confidence")]
-    }
+        phosphointeractions<-merge(merge(subset(interactions[[X]], confidence > confidence_threshold), regulator_ppi, by="regulator", allow.cartesian=TRUE), target_ppi, by="target", allow.cartesian=TRUE)[,c("regulator_peptide_id","target_peptide_id","confidence")]
+      }
 
-    if (restrict_interactions) {
-      phosphointeractions<-subset(phosphointeractions, regulator_peptide_id %in% unique(c(subset(regulators, protein_id %in% kinases)$peptide_id, subset(regulators, protein_id %in% phosphatases)$peptide_id)))
-    }
+      if (restrict_interactions) {
+        phosphointeractions<-subset(phosphointeractions, regulator_peptide_id %in% unique(c(subset(regulators, protein_id %in% kinases)$peptide_id, subset(regulators, protein_id %in% phosphatases)$peptide_id)))
+      }
 
-    write.table(phosphointeractions, file=file.path(output_dir,"phosphointeractions.txt"), quote=FALSE, row.names=FALSE, sep="\t")
+      write.table(phosphointeractions, file=file.path(output_dir,paste(X,"phosphointeractions.txt",sep="_")), quote=FALSE, row.names=FALSE, sep="\t")
+    })
   }
 }
 
