@@ -8,6 +8,7 @@ importOpenSWATH(
   file,
   fasta,
   normalization_method = FALSE,
+  normalization_center = TRUE,
   batchfile,
   cores = 1
 )
@@ -18,6 +19,8 @@ importOpenSWATH(
 \item{fasta}{Amino acid FASTA file from UniProt}
 
 \item{normalization_method}{Either "FALSE" (skip normalization), "quantile" or "cyclicLoess" normalization}
+
+\item{normalization_center}{Either FALSE (skip center normalization) or TRUE}
 
 \item{batchfile}{A data.table with tags (replacement for run_id) and batch annotation for separate normalization (columns: run_id, tag, aggregator_id, ds_id)}
 

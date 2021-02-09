@@ -87,7 +87,7 @@ convert_sites<-function(fasta, gene_id, protein_id, modified_peptide_sequence){
   return(protein_sites[,c("site_id","phosphosite")])
 }
 
-normalize_pvt<-function(pvt, normalization_method="quantile") {
+normalize_pvt<-function(pvt, normalization_method="quantile", normalization_center=TRUE) {
   # generate matrix
   datmx<-dcast(unique(pvt[,c("peptide_id","tag","peptide_intensity")]), peptide_id ~ tag, value.var = "peptide_intensity")
 
@@ -102,7 +102,9 @@ normalize_pvt<-function(pvt, normalization_method="quantile") {
   datmx[datmx<0]<-NA
 
   # center run-wise by median
-  datmx<-apply(datmx,2,function(X){return(X-median(X, na.rm=TRUE))})
+  if (normalization_center) {
+    datmx<-apply(datmx,2,function(X){return(X-median(X, na.rm=TRUE))})
+  }
 
   # normalize matrix
   if (normalization_method==FALSE) {
@@ -137,6 +139,7 @@ normalize_pvt<-function(pvt, normalization_method="quantile") {
 #' @param file OpenSWATH TSV file
 #' @param fasta Amino acid FASTA file from UniProt
 #' @param normalization_method Either "FALSE" (skip normalization), "quantile" or "cyclicLoess" normalization
+#' @param normalization_center Either FALSE (skip center normalization) or TRUE
 #' @param batchfile A data.table with tags (replacement for run_id) and batch annotation for separate normalization (columns: run_id, tag, aggregator_id, ds_id)
 #' @param cores Integer indicating the number of cores to use
 #' @return peptide-level phosphoviper data.table
@@ -148,7 +151,7 @@ normalize_pvt<-function(pvt, normalization_method="quantile") {
 #' @import preprocessCore
 #' @importFrom limma normalizeCyclicLoess
 #' @export
-importOpenSWATH<-function(file, fasta, normalization_method = FALSE, batchfile, cores = 1) {
+importOpenSWATH<-function(file, fasta, normalization_method = FALSE, normalization_center=TRUE, batchfile, cores = 1) {
 
   # load reference fasta library
   message("Loading FASTA DB")
@@ -184,7 +187,7 @@ importOpenSWATH<-function(file, fasta, normalization_method = FALSE, batchfile, 
 
   # normalize data
   if ("aggregator_id" %in% colnames(batchfile)) {
-    datln<-ddply(batchfile,.(aggregator_id),function(X){return(normalize_pvt(subset(datl, tag %in% X$tag), normalization_method))})
+    datln<-ddply(batchfile,.(aggregator_id),function(X){return(normalize_pvt(subset(datl, tag %in% X$tag), normalization_method, normalization_center))})
   }
   else {
     datln<-normalize_pvt(datl, normalization_method)
@@ -198,76 +201,6 @@ importOpenSWATH<-function(file, fasta, normalization_method = FALSE, batchfile, 
   return(datl)
 }
 
-#' Import Spectronaut TXT file
-#'
-#' This function imports a Spectronaut TXT file and converts the data to the unified phosphoviper format
-#'
-#' @param file Spectronaut TXT file
-#' @param fasta Amino acid FASTA file from UniProt
-#' @param run_ids Column names of runs to extract
-#' @param cores Integer indicating the number of cores to use (only 1 in Windows-based systems)
-#' @return peptide-level phosphoviper data.table
-#' @import data.table
-#' @importFrom plyr ddply .
-#' @import seqinr
-#' @import stringr
-#' @import pbapply
-#' @import preprocessCore
-#' @export
-importSpectronaut<-function(file, fasta, run_ids, cores = 1) {
-
-  # load reference fasta library
-  message("Loading FASTA DB")
-  fasta<-read.fasta(fasta, seqtype="AA", as.string = TRUE, set.attributes = FALSE)
-  genes_proteins<-data.table("gene_id"=as.vector(sapply(names(fasta),function(X){strsplit(strsplit(X,"\\|")[[1]][3],"_")[[1]][1]})), "protein_id"=as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]})))
-  names(fasta)<-as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]}))
-
-  # load Spectronaut data
-  message("Loading Spectronaut data")
-  dat<-fread(file)
-  dat<-dat[,c("EG.PrecursorId", run_ids),with = FALSE]
-  dat<-melt(dat, id.vars=c("EG.PrecursorId"), measure.vars=run_ids, variable.name="run_id", value.name="peptide_intensity")
-
-  names(dat)<-c("peptide_id","run_id","peptide_intensity")
-
-  dat$modified_peptide_sequence<-sapply(dat$peptide_id,function(X){strsplit(X, "\\.")[[1]][1]})
-
-  # map peptides to proteins
-  dat$modified_peptide_sequence<-replace_spectronaut_ptms(dat$modified_peptide_sequence)
-  dat$peptide_sequence<-str_to_upper(strip_ptms(dat$modified_peptide_sequence))
-  dat<-subset(dat, peptide_sequence != modified_peptide_sequence)
-  peptides_proteins<-data.table("peptide_sequence"=unique(dat$peptide_sequence))
-  message("Mapping Spectronaut peptides to FASTA")
-  peptides_proteins$protein_id<-names(fasta)[pbsapply(peptides_proteins$peptide_sequence,function(X){index<-str_which(fasta,X);if(length(index)==1){return(index)}else{return(length(fasta)+1)}}, cl=cores)]
-  datl<-merge(merge(peptides_proteins, dat, by="peptide_sequence"), genes_proteins, by="protein_id")
-
-  # map phosphosites
-  message("Mapping phosphopeptide sites")
-  site_mapping<-as.data.table(ddply(unique(datl[,c("gene_id","protein_id","modified_peptide_sequence")]),.(modified_peptide_sequence),function(X){convert_sites(fasta,X$gene_id,X$protein_id,X$modified_peptide_sequence)}))
-  site_mapping<-merge(site_mapping, unique(datl[,c("gene_id","protein_id","peptide_id","peptide_sequence","modified_peptide_sequence")]),by="modified_peptide_sequence")
-
-  # generate matrix
-  datmx<-dcast(unique(datl[,c("peptide_id","run_id","peptide_intensity")]), peptide_id ~ run_id, value.var = "peptide_intensity")
-
-  # get annotation
-  rowids<-datmx$peptide_id
-  colids<-colnames(datmx[,-1])
-  datmx<-as.matrix(datmx[,-1])
-  datmx[datmx == 0]<-NA
-
-  # normalize matrix
-  datmxn<-log10(normalize.quantiles(datmx))
-  colnames(datmxn)<-colids
-  datmxn<-data.table(datmxn)
-  datmxn$peptide_id<-rowids
-
-  datln<-melt(datmxn, id.vars="peptide_id", variable.name="run_id", value.name="peptide_intensity")
-
-  datl<-merge(datln, site_mapping,by="peptide_id", allow.cartesian=TRUE)
-
-  return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
-}
-
 #' Import IonQuant file
 #'
 #' This function imports an IonQuant mbr_ion.tsv or MSstats.csv file and converts the data to the unified phosphoviper format
@@ -275,6 +208,7 @@ importSpectronaut<-function(file, fasta, run_ids, cores = 1) {
 #' @param file IonQuant mbr_ion.tsv or MSstats.csv file
 #' @param fasta Amino acid FASTA file from UniProt
 #' @param normalization_method Either "FALSE" (skip normalization), "quantile" or "cyclicLoess" normalization
+#' @param normalization_center Either FALSE (skip center normalization) or TRUE
 #' @param batchfile A data.table with tags (replacement for run_id) and batch annotation for separate normalization (columns: run_id, tag, aggregator_id, ds_id)
 #' @param cores Integer indicating the number of cores to use
 #' @return peptide-level phosphoviper data.table
@@ -286,7 +220,7 @@ importSpectronaut<-function(file, fasta, run_ids, cores = 1) {
 #' @import preprocessCore
 #' @importFrom limma normalizeCyclicLoess
 #' @export
-importIonQuant<-function(file, fasta, normalization_method = FALSE, batchfile, cores = 1) {
+importIonQuant<-function(file, fasta, normalization_method = FALSE, normalization_center=TRUE, batchfile, cores = 1) {
   # load reference fasta library
   message("Loading FASTA DB")
   fasta<-read.fasta(fasta, seqtype="AA", as.string = TRUE, set.attributes = FALSE)
@@ -336,10 +270,10 @@ importIonQuant<-function(file, fasta, normalization_method = FALSE, batchfile, c
 
   # normalize data
   if ("aggregator_id" %in% colnames(batchfile)) {
-    datln<-ddply(batchfile,.(aggregator_id),function(X){return(normalize_pvt(subset(datl, tag %in% X$tag), normalization_method))})
+    datln<-ddply(batchfile,.(aggregator_id),function(X){return(normalize_pvt(subset(datl, tag %in% X$tag), normalization_method, normalization_center))})
   }
   else {
-    datln<-normalize_pvt(datl, normalization_method)
+    datln<-normalize_pvt(datl, normalization_method, normalization_center)
   }
 
   datl<-merge(merge(datln, unique(datl[,c("peptide_id","tag","pep")]), by=c("peptide_id","tag")), site_mapping,by="peptide_id", allow.cartesian=TRUE)
@@ -348,126 +282,6 @@ importIonQuant<-function(file, fasta, normalization_method = FALSE, batchfile, c
   names(datl)<-c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity","pep")
 
   return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity","pep")])
-}
-
-#' Import protein Progenesis TXT file
-#'
-#' This function imports a protein Progenesis TXT file and converts the data to the unified phosphoviper format
-#'
-#' @param file proteo Progenesis TXT file
-#' @param run_ids Column names of runs to extract
-#' @return peptide-level phosphoviper data.table
-#' @import data.table
-#' @export
-importProteoProgenesis<-function(file, run_ids) {
-  # load Progenesis data
-  message("Loading Progenesis data")
-  dat<-fread(file)
-  dat<-dat[,c("geneName","ac", run_ids),with = FALSE]
-  names(dat)<-c("gene_id","protein_id",run_ids)
-
-  # transform to longlist
-  datl<-reshape2::melt(dat, id.vars=c("gene_id", "protein_id"), measure.vars=run_ids, variable.name="run_id", value.name="peptide_intensity")
-  datl$peptide_intensity<-log10(datl$peptide_intensity)
-
-  # append additional columns
-  datl$phosphosite<-"PA"
-  datl$site_id<-paste(datl$gene_id,datl$protein_id,datl$phosphosite,sep=":")
-  datl$peptide_id<-datl$protein_id
-  datl$peptide_sequence<-datl$protein_id
-  datl$modified_peptide_sequence<-datl$protein_id
-
-  return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
-}
-
-#' Import phospho Progenesis TXT file
-#'
-#' This function imports a phospho Progenesis TXT file and converts the data to the unified phosphoviper format
-#'
-#' @param file phospho Progenesis TXT file
-#' @param fasta Amino acid FASTA file from UniProt
-#' @param run_ids Column names of runs to extract
-#' @param cores Integer indicating the number of cores to use (only 1 in Windows-based systems)
-#' @return peptide-level phosphoviper data.table
-#' @import data.table
-#' @importFrom plyr ddply .
-#' @import seqinr
-#' @import stringr
-#' @import pbapply
-#' @import preprocessCore
-#' @export
-importPhosphoProgenesis<-function(file, fasta, run_ids, cores = 1) {
-
-  # load reference fasta library
-  message("Loading FASTA DB")
-  fasta<-read.fasta(fasta, seqtype="AA", as.string = TRUE, set.attributes = FALSE)
-  genes_proteins<-data.table("gene_id"=as.vector(sapply(names(fasta),function(X){strsplit(strsplit(X,"\\|")[[1]][3],"_")[[1]][1]})), "protein_id"=as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]})))
-  names(fasta)<-as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]}))
-
-  # load Progenesis data
-  message("Loading Progenesis data")
-  dat<-fread(file)
-  dat<-dat[,c("peptide","ptm", run_ids),with = FALSE]
-  names(dat)<-c("peptide_sequence","ptm",run_ids)
-  dat$peptide_id<-paste(rownames(dat),dat$peptide_sequence,sep="_")
-
-  # separate into meta and quantitative matrix
-  datq<-dat[,c("peptide_id", run_ids),with=FALSE]
-  datq<-reshape2::melt(datq, id.vars=c("peptide_id"), measure.vars=run_ids, variable.name="run_id", value.name="peptide_intensity")
-
-  datm<-dat[,c("peptide_id","peptide_sequence","ptm"),with=FALSE]
-  datm$modifications<-datm$ptm
-
-  # separate rows
-  datm<-as.data.frame(separate_rows(datm, ptm, convert = TRUE, sep="\\|"))
-
-  # remove non-phospho peptides
-  datm<-datm[str_detect(datm$ptm, "Phospho"),]
-
-  # extract sites
-  datm$ptm <- str_extract_all(datm$ptm, "\\[([^\\[\\]]*)\\]")
-  datm$ptm <- as.numeric(regmatches(datm$ptm, gregexpr("\\[\\K[^\\]]+(?=\\])", datm$ptm, perl=TRUE)))
-
-  # sequence modification function
-  modify_seq<-function(ps,site){paste(substr(ps,1,(as.numeric(site)-1)),str_to_lower(substr(ps,as.numeric(site),as.numeric(site))),substr(ps,(as.numeric(site)+1),(nchar(ps))),sep="")}
-
-  datm<-ddply(datm,.(peptide_id,peptide_sequence,modifications),function(X){ps<-unique(X$peptide_sequence); for(site in sort(X$ptm, decreasing = TRUE)){ps<-modify_seq(ps, site)}; return(data.frame("modified_peptide_sequence"=ps))})
-
-  # map peptides to proteins
-  peptides_proteins<-data.table("peptide_sequence"=unique(datm$peptide_sequence))
-  message("Mapping Progenesis peptides to FASTA")
-  peptides_proteins$protein_id<-names(fasta)[pbsapply(peptides_proteins$peptide_sequence,function(X){index<-str_which(fasta,X);if(length(index)==1){return(index)}else{return(length(fasta)+1)}}, cl=cores)]
-  datl<-merge(merge(peptides_proteins, datm, by="peptide_sequence"), genes_proteins, by="protein_id")
-
-  # map phosphosites
-  message("Mapping phosphopeptide sites")
-  site_mapping<-as.data.table(ddply(unique(datl[,c("gene_id","protein_id","modified_peptide_sequence")]),.(modified_peptide_sequence),function(X){convert_sites(fasta,X$gene_id,X$protein_id,X$modified_peptide_sequence)}))
-  site_mapping<-merge(site_mapping, unique(datl[,c("gene_id","protein_id","peptide_id","peptide_sequence","modified_peptide_sequence")]),by="modified_peptide_sequence")
-
-  # merge meta and quantitative data
-  datl<-merge(datl, datq, by="peptide_id")
-
-  # generate matrix
-  datmx<-dcast(unique(datl[,c("peptide_id","run_id","peptide_intensity")]), peptide_id ~ run_id, value.var = "peptide_intensity")
-
-  # get annotation
-  rowids<-datmx$peptide_id
-  colids<-colnames(datmx[,-1])
-  datmx<-as.matrix(datmx[,-1])
-  datmx[datmx == 0]<-NA
-
-  # normalize matrix
-  datmxn<-log10(datmx)
-  # datmxn<-log10(normalize.quantiles(datmx))
-  colnames(datmxn)<-colids
-  datmxn<-data.table(datmxn)
-  datmxn$peptide_id<-rowids
-
-  datln<-melt(datmxn, id.vars="peptide_id", variable.name="run_id", value.name="peptide_intensity")
-
-  datl<-merge(datln, site_mapping,by="peptide_id", allow.cartesian=TRUE)
-
-  return(datl[,c("gene_id","protein_id","peptide_id","site_id","modified_peptide_sequence","peptide_sequence","phosphosite","run_id","peptide_intensity")])
 }
 
 #' Import protein MaxQuant proteinGroups TXT file

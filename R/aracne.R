@@ -177,17 +177,29 @@ vmx2pv<-function(vmx, fasta=NULL, tag = "PV") {
     pv$site_id<-paste(pv$gene_id,pv$protein_id,pv$phosphosite,sep=":")
     pv$peptide_id<-paste(pv$gene_id,pv$protein_id,pv$phosphosite,sep=":")
   } else {
-    pv<-reshape2::melt(vmx, value.name="peptide_intensity")
-    names(pv)<-c("site_id","run_id","peptide_intensity")
+    if (is.null(tag)) {
+      pv<-reshape2::melt(vmx, value.name="peptide_intensity")
+      names(pv)<-c("site_id","run_id","peptide_intensity")
 
-    regulon_map<-data.table("site_id"=as.character(unique(pv$site_id)),"gene_id"=as.vector(sapply(as.character(unique(pv$site_id)),function(X){strsplit(X,":")[[1]][1]})),"protein_id"=as.vector(sapply(as.character(unique(pv$site_id)),function(X){strsplit(X,":")[[1]][2]})))
+      regulon_map<-data.table("site_id"=as.character(unique(pv$site_id)),"gene_id"=as.vector(sapply(as.character(unique(pv$site_id)),function(X){strsplit(X,":")[[1]][1]})),"protein_id"=as.vector(sapply(as.character(unique(pv$site_id)),function(X){strsplit(X,":")[[1]][2]})),"phosphosite"=as.vector(sapply(as.character(unique(pv$site_id)),function(X){strsplit(X,":")[[1]][3]})))
 
-    pv<-merge(pv, regulon_map, by="site_id")
-    pv$site_id<-paste(pv$site_id,tag,sep=":")
-    pv$modified_peptide_sequence<-pv$site_id
-    pv$peptide_sequence<-pv$site_id
-    pv$phosphosite<-tag
-    pv$peptide_id<-pv$site_id
+      pv<-merge(pv, regulon_map, by="site_id")
+      pv$modified_peptide_sequence<-pv$site_id
+      pv$peptide_sequence<-pv$site_id
+      pv$peptide_id<-pv$site_id
+    } else {
+      pv<-reshape2::melt(vmx, value.name="peptide_intensity")
+      names(pv)<-c("site_id","run_id","peptide_intensity")
+
+      regulon_map<-data.table("site_id"=as.character(unique(pv$site_id)),"gene_id"=as.vector(sapply(as.character(unique(pv$site_id)),function(X){strsplit(X,":")[[1]][1]})),"protein_id"=as.vector(sapply(as.character(unique(pv$site_id)),function(X){strsplit(X,":")[[1]][2]})))
+
+      pv<-merge(pv, regulon_map, by="site_id")
+      pv$site_id<-paste(pv$site_id,tag,sep=":")
+      pv$modified_peptide_sequence<-pv$site_id
+      pv$peptide_sequence<-pv$site_id
+      pv$phosphosite<-tag
+      pv$peptide_id<-pv$site_id
+    }
   }
 
   return(pv)

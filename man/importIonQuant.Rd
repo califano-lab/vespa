@@ -4,7 +4,14 @@
 \alias{importIonQuant}
 \title{Import IonQuant file}
 \usage{
-importIonQuant(file, fasta, normalization_method = FALSE, batchfile, cores = 1)
+importIonQuant(
+  file,
+  fasta,
+  normalization_method = FALSE,
+  normalization_center = TRUE,
+  batchfile,
+  cores = 1
+)
 }
 \arguments{
 \item{file}{IonQuant mbr_ion.tsv or MSstats.csv file}
@@ -12,6 +19,8 @@ importIonQuant(file, fasta, normalization_method = FALSE, batchfile, cores = 1)
 \item{fasta}{Amino acid FASTA file from UniProt}
 
 \item{normalization_method}{Either "FALSE" (skip normalization), "quantile" or "cyclicLoess" normalization}
+
+\item{normalization_center}{Either FALSE (skip center normalization) or TRUE}
 
 \item{batchfile}{A data.table with tags (replacement for run_id) and batch annotation for separate normalization (columns: run_id, tag, aggregator_id, ds_id)}
 
