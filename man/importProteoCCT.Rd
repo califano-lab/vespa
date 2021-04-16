@@ -4,14 +4,12 @@
 \alias{importProteoCCT}
 \title{Import protein CCT file}
 \usage{
-importProteoCCT(file, fasta, hgnc)
+importProteoCCT(file, fasta)
 }
 \arguments{
 \item{file}{protein-level CCT file}
 
 \item{fasta}{Amino acid FASTA file from UniProt}
-
-\item{hgnc}{HGNC mapping file}
 }
 \value{
 peptide-level phosphoviper data.table

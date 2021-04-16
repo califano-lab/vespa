@@ -8,8 +8,8 @@ importOpenSWATH(
   file,
   fasta,
   normalization_method = FALSE,
-  normalization_center = TRUE,
-  batchfile,
+  normalization_center = FALSE,
+  batchfile = NULL,
   cores = 1
 )
 }
@@ -22,7 +22,7 @@ importOpenSWATH(
 
 \item{normalization_center}{Either FALSE (skip center normalization) or TRUE}
 
-\item{batchfile}{A data.table with tags (replacement for run_id) and batch annotation for separate normalization (columns: run_id, tag, aggregator_id, ds_id)}
+\item{batchfile}{An optional data.table with tags ("tag"; replacement for "run_id") and batch annotation for separate normalization (columns: "run_id", "tag", "aggregator_id", "ds_id")}
 
 \item{cores}{Integer indicating the number of cores to use}
 }

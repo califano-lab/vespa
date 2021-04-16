@@ -4,14 +4,12 @@
 \alias{importProteoCPTAC}
 \title{Import protein CPTAC file}
 \usage{
-importProteoCPTAC(file, fasta, hgnc)
+importProteoCPTAC(file, fasta)
 }
 \arguments{
 \item{file}{protein-level CPTAC file}
 
 \item{fasta}{Amino acid FASTA file from UniProt}
-
-\item{hgnc}{HGNC mapping file}
 }
 \value{
 peptide-level phosphoviper data.table

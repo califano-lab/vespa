@@ -165,8 +165,8 @@ vmx2pv<-function(vmx, fasta=NULL, tag = "PV") {
   # load reference fasta library
   if (!is.null(fasta)) {
     message("Loading FASTA DB")
-    fasta<-read.fasta(fasta, seqtype="AA", as.string = TRUE, set.attributes = FALSE)
-    genes_proteins<-data.table("gene_id"=as.vector(sapply(names(fasta),function(X){strsplit(strsplit(X,"\\|")[[1]][3],"_")[[1]][1]})), "protein_id"=as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]})))
+    fasta<-read.fasta(fasta, seqtype="AA", as.string = TRUE, set.attributes = TRUE)
+    genes_proteins<-data.table("gene_id"=as.vector(sapply(fasta,function(X){strsplit(strsplit(attributes(X)$Annot,"GN=")[[1]][2]," ")[[1]][1]})), "protein_id"=as.vector(sapply(names(fasta),function(X){strsplit(X,"\\|")[[1]][2]})))
 
     pv<-reshape2::melt(vmx, value.name="peptide_intensity")
     names(pv)<-c("protein_id","run_id","peptide_intensity")
@@ -211,7 +211,7 @@ vmx2pv<-function(vmx, fasta=NULL, tag = "PV") {
 #' @param net.list List object with the networks to be used
 #' @return Optimized network with best regulon per gene
 #' @export
-optimizeRegulon <- function(ges, net.list, min_size=25, pleiotropy=FALSE, pleiotropyArgs = list(regulators = 0.05, shadow = 0.05, targets = 10, penalty = 20, method = "adaptive")) {
+optimizeRegulon <- function(ges, net.list, min_size=10) {
   selectRegulon<-function(vip.list, net.list, g) {
     w.mat <- matrix(0L, nrow = num.nets, ncol = 1)
     rownames(w.mat) <- names(net.list)
@@ -241,8 +241,7 @@ optimizeRegulon <- function(ges, net.list, min_size=25, pleiotropy=FALSE, pleiot
   print('Generating VIPER matrices...')
   vip.list <- list()
   for (i in 1:num.nets) {
-    vip.list[[i]] <- viper(ges, net.list[i], method = 'none', minsize=min_size, pleiotropy = pleiotropy, pleiotropyArgs
- = pleiotropyArgs)
+    vip.list[[i]] <- viper(ges, net.list[i], method = 'none')
   }
   names(vip.list) <- names(net.list)
 
@@ -259,6 +258,36 @@ optimizeRegulon <- function(ges, net.list, min_size=25, pleiotropy=FALSE, pleiot
 
   class(regulons)<-"regulon"
   return(regulons)
+}
+
+#' Orthogonal site-specific regulon selection
+#'
+#' @param ges Gene Expression Signature (features X samples)
+#' @param regulon Site-specific regulons
+#' @param min_size Minimum regulon size
+#' @param cutoff Pairwise correlation cutoff to remove regulons
+#' @return Optimized network containing only orthogonal site-specific regulons for each protein
+#' @import plyr
+#' @importFrom caret findCorrelation
+#' @export
+orthogonalRegulon <- function(ges, regulon, min_size=10, cutoff=0.5) {
+  # generate VIPER matrix
+  subregulon <- subsetRegulon(regulon, min_size = min_size, target = row.names(ges))
+  vpmx <- viper(ges, subregulon, method = 'none', minsize=min_size)
+
+  # generate regulon map
+  mapregulon<-data.frame("site_id"=names(subregulon),"protein_id"=as.vector(sapply(names(subregulon),function(X){strsplit(X,":")[[1]][2]})))
+
+  # identify correlated regulons
+  correlated_regulons<-ddply(mapregulon,.(protein_id),function(X){data.frame("site_id"=findCorrelation(cor(t(vpmx[X$site_id,])), cutoff = cutoff, names=TRUE))})
+
+  # report number of regulons to be removed
+  message(paste(length(correlated_regulons$site_id),"regulons out of",length(regulons),"are correlated and will be removed."))
+
+  # remove regulons
+  regulon[correlated_regulons$site_id]<-NULL
+
+  return(regulon)
 }
 
 #' Copied from VIPER package

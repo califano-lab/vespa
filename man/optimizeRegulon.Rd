@@ -4,14 +4,7 @@
 \alias{optimizeRegulon}
 \title{metaVIPER regulon selection}
 \usage{
-optimizeRegulon(
-  ges,
-  net.list,
-  min_size = 25,
-  pleiotropy = FALSE,
-  pleiotropyArgs = list(regulators = 0.05, shadow = 0.05, targets = 10, penalty = 20,
-    method = "adaptive")
-)
+optimizeRegulon(ges, net.list, min_size = 10)
 }
 \arguments{
 \item{ges}{Gene Expression Signature (features X samples)}
