@@ -14,8 +14,8 @@ importPhosphoCPTAC(file, fasta, cores = 1)
 \item{cores}{Integer indicating the number of cores to use (only 1 in Windows-based systems)}
 }
 \value{
-peptide-level phosphoviper data.table
+peptide-level vespa data.table
 }
 \description{
-This function imports a phospho CPTAC file and converts the data to the unified phosphoviper format
+This function imports a phospho CPTAC file and converts the data to the unified vespa format
 }

@@ -1,10 +1,10 @@
-#' phosphoVIPER: phosphoproteomic extension for VIPER
+#' vespa: Virtual Enrichment-based Signaling Protein-activity Analysis
 #'
-#' phosphoVIPER provides extensions to analyse phosphoproteomic data using hpARACNe and VIPER.
+#' VESPA provides extensions to analyse phosphoproteomic data by ARACNe and VIPER.
 #'
 #' @details
 #' \tabular{ll}{
-#' Package: \tab phosphoviper\cr
+#' Package: \tab vespa\cr
 #' Type: \tab Package\cr
 #' License: \tab Columbia University Non-Commercial License\cr
 #' }
@@ -13,6 +13,6 @@
 #' George Rosenberger \email{gr2578@cumc.columbia.edu}
 
 #' @docType package
-#' @name phosphoviper
+#' @name vespa
 #' @exportPattern ^[[:alpha:]]+
 NULL

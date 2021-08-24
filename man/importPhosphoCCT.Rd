@@ -10,8 +10,8 @@ importPhosphoCCT(file)
 \item{file}{CCT file}
 }
 \value{
-peptide-level phosphoviper data.table
+peptide-level vespa data.table
 }
 \description{
-This function imports a phospho CCT file and converts the data to the unified phosphoviper format
+This function imports a phospho CCT file and converts the data to the unified vespa format
 }

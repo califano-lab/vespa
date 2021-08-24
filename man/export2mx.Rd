@@ -7,7 +7,7 @@
 export2mx(datl, fillvalues = NA, jitter = TRUE)
 }
 \arguments{
-\item{datl}{Unified phosphoviper format}
+\item{datl}{Unified vespa format}
 
 \item{fillvalues}{Missing value imputation method ("rowmin": Row-wise (peptide) minimum; "colmin": Column-wise (run) minimum; NULL: Skip and use NA)}
 
@@ -17,5 +17,5 @@ export2mx(datl, fillvalues = NA, jitter = TRUE)
 matrix
 }
 \description{
-This function exports tables in the unified phosphoviper format to a matrix
+This function exports tables in the unified vespa format to a matrix
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/aracne.R
 \name{vmx2pv}
 \alias{vmx2pv}
-\title{Export to unified phosphoviper format from viper matrix}
+\title{Export to unified vespa format from viper matrix}
 \usage{
 vmx2pv(vmx, fasta = NULL, tag = "PV")
 }
@@ -14,8 +14,8 @@ vmx2pv(vmx, fasta = NULL, tag = "PV")
 \item{matrix}{phosphoVIPER quantitative matrix}
 }
 \value{
-phosphoviper table
+vespa table
 }
 \description{
-This function exports a viper matrix to the unified phosphoviper format
+This function exports a viper matrix to the unified vespa format
 }

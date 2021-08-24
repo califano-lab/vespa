@@ -27,8 +27,8 @@ importIonQuant(
 \item{cores}{Integer indicating the number of cores to use}
 }
 \value{
-peptide-level phosphoviper data.table
+peptide-level vespa data.table
 }
 \description{
-This function imports an IonQuant mbr_ion.tsv or MSstats.csv file and converts the data to the unified phosphoviper format
+This function imports an IonQuant mbr_ion.tsv or MSstats.csv file and converts the data to the unified vespa format
 }

@@ -134,7 +134,7 @@ normalize_pvt<-function(pvt, normalization_method="quantile", normalization_cent
 
 #' Import OpenSWATH TSV file
 #'
-#' This function imports a OpenSWATH TSV file and converts the data to the unified phosphoviper format
+#' This function imports a OpenSWATH TSV file and converts the data to the unified vespa format
 #'
 #' @param file OpenSWATH TSV file
 #' @param fasta Amino acid FASTA file from UniProt
@@ -142,7 +142,7 @@ normalize_pvt<-function(pvt, normalization_method="quantile", normalization_cent
 #' @param normalization_center Either FALSE (skip center normalization) or TRUE
 #' @param batchfile An optional data.table with tags ("tag"; replacement for "run_id") and batch annotation for separate normalization (columns: "run_id", "tag", "aggregator_id", "ds_id")
 #' @param cores Integer indicating the number of cores to use
-#' @return peptide-level phosphoviper data.table
+#' @return peptide-level vespa data.table
 #' @import data.table
 #' @importFrom plyr ddply .
 #' @importFrom seqinr read.fasta
@@ -202,7 +202,7 @@ importOpenSWATH<-function(file, fasta, normalization_method = FALSE, normalizati
 
 #' Import IonQuant file
 #'
-#' This function imports an IonQuant mbr_ion.tsv or MSstats.csv file and converts the data to the unified phosphoviper format
+#' This function imports an IonQuant mbr_ion.tsv or MSstats.csv file and converts the data to the unified vespa format
 #'
 #' @param file IonQuant mbr_ion.tsv or MSstats.csv file
 #' @param fasta Amino acid FASTA file from UniProt
@@ -210,7 +210,7 @@ importOpenSWATH<-function(file, fasta, normalization_method = FALSE, normalizati
 #' @param normalization_center Either FALSE (skip center normalization) or TRUE
 #' @param batchfile An optional data.table with tags ("tag"; replacement for "run_id") and batch annotation for separate normalization (columns: "run_id", "tag", "aggregator_id", "ds_id")
 #' @param cores Integer indicating the number of cores to use
-#' @return peptide-level phosphoviper data.table
+#' @return peptide-level vespa data.table
 #' @import data.table
 #' @importFrom plyr ddply .
 #' @importFrom seqinr read.fasta
@@ -285,12 +285,12 @@ importIonQuant<-function(file, fasta, normalization_method = FALSE, normalizatio
 
 #' Import protein MaxQuant proteinGroups TXT file
 #'
-#' This function imports a protein MaxQuant proteinGroups TXT file and converts the data to the unified phosphoviper format
+#' This function imports a protein MaxQuant proteinGroups TXT file and converts the data to the unified vespa format
 #'
 #' @param file protein MaxQuant proteinGroups TXT file
 #' @param fasta Amino acid FASTA file from UniProt
 #' @param cores Integer indicating the number of cores to use (only 1 in Windows-based systems)
-#' @return peptide-level phosphoviper data.table
+#' @return peptide-level vespa data.table
 #' @import data.table
 #' @importFrom plyr ddply .
 #' @importFrom seqinr read.fasta
@@ -335,12 +335,12 @@ importProteoMaxQuant<-function(file, fasta, cores = 1) {
 
 #' Import phospho MaxQuant Evidence TXT file
 #'
-#' This function imports a phospho MaxQuant Evidence TXT file and converts the data to the unified phosphoviper format
+#' This function imports a phospho MaxQuant Evidence TXT file and converts the data to the unified vespa format
 #'
 #' @param file phospho MaxQuant Evidence TXT file
 #' @param fasta Amino acid FASTA file from UniProt
 #' @param cores Integer indicating the number of cores to use (only 1 in Windows-based systems)
-#' @return peptide-level phosphoviper data.table
+#' @return peptide-level vespa data.table
 #' @import data.table
 #' @importFrom plyr ddply .
 #' @importFrom seqinr read.fasta
@@ -427,11 +427,11 @@ importPhosphoMaxQuant<-function(file, fasta, cores = 1) {
 
 #' Import protein CPTAC file
 #'
-#' This function imports a protein CPTAC file and converts the data to the unified phosphoviper format
+#' This function imports a protein CPTAC file and converts the data to the unified vespa format
 #'
 #' @param file protein-level CPTAC file
 #' @param fasta Amino acid FASTA file from UniProt
-#' @return peptide-level phosphoviper data.table
+#' @return peptide-level vespa data.table
 #' @import data.table
 #' @import stringr
 #' @importFrom plyr ddply .
@@ -471,12 +471,12 @@ importProteoCPTAC<-function(file, fasta) {
 
 #' Import phospho CPTAC file
 #'
-#' This function imports a phospho CPTAC file and converts the data to the unified phosphoviper format
+#' This function imports a phospho CPTAC file and converts the data to the unified vespa format
 #'
 #' @param file CPTAC file
 #' @param fasta Amino acid FASTA file from UniProt
 #' @param cores Integer indicating the number of cores to use (only 1 in Windows-based systems)
-#' @return peptide-level phosphoviper data.table
+#' @return peptide-level vespa data.table
 #' @import data.table
 #' @importFrom plyr ddply .
 #' @importFrom seqinr read.fasta
@@ -521,11 +521,11 @@ importPhosphoCPTAC<-function(file, fasta, cores = 1) {
 
 #' Import protein CCT file
 #'
-#' This function imports a protein CCT file and converts the data to the unified phosphoviper format
+#' This function imports a protein CCT file and converts the data to the unified vespa format
 #'
 #' @param file protein-level CCT file
 #' @param fasta Amino acid FASTA file from UniProt
-#' @return peptide-level phosphoviper data.table
+#' @return peptide-level vespa data.table
 #' @import data.table
 #' @importFrom plyr ddply .
 #' @importFrom tidyr separate_rows
@@ -559,10 +559,10 @@ importProteoCCT<-function(file, fasta) {
 
 #' Import phospho CCT file
 #'
-#' This function imports a phospho CCT file and converts the data to the unified phosphoviper format
+#' This function imports a phospho CCT file and converts the data to the unified vespa format
 #'
 #' @param file CCT file
-#' @return peptide-level phosphoviper data.table
+#' @return peptide-level vespa data.table
 #' @import data.table
 #' @importFrom plyr ddply .
 #' @export
@@ -588,10 +588,10 @@ importPhosphoCCT<-function(file) {
 
 #' Import protein SANGER file
 #'
-#' This function imports a protein SANGER file and converts the data to the unified phosphoviper format
+#' This function imports a protein SANGER file and converts the data to the unified vespa format
 #'
 #' @param file protein SANGER file
-#' @return peptide-level phosphoviper data.table
+#' @return peptide-level vespa data.table
 #' @import data.table
 #' @export
 importProteoSANGER<-function(file) {
@@ -618,12 +618,12 @@ importProteoSANGER<-function(file) {
 
 #' Import phospho SANGER file
 #'
-#' This function imports a phospho SANGER file and converts the data to the unified phosphoviper format
+#' This function imports a phospho SANGER file and converts the data to the unified vespa format
 #'
 #' @param file phospho SANGER file
 #' @param fasta Amino acid FASTA file from UniProt
 #' @param cores Integer indicating the number of cores to use (only 1 in Windows-based systems)
-#' @return peptide-level phosphoviper data.table
+#' @return peptide-level vespa data.table
 #' @import data.table
 #' @importFrom plyr ddply .
 #' @importFrom seqinr read.fasta

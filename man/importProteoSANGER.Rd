@@ -10,8 +10,8 @@ importProteoSANGER(file)
 \item{file}{protein SANGER file}
 }
 \value{
-peptide-level phosphoviper data.table
+peptide-level vespa data.table
 }
 \description{
-This function imports a protein SANGER file and converts the data to the unified phosphoviper format
+This function imports a protein SANGER file and converts the data to the unified vespa format
 }

@@ -1,8 +1,8 @@
 #' Export hpARACNe files
 #'
-#' This function exports hpARACNe input files from the unified phosphoviper format
+#' This function exports hpARACNe input files from the unified vespa format
 #'
-#' @param datl Unified phosphoviper format
+#' @param datl Unified vespa format
 #' @param output_dir Output directory
 #' @param kinases List of kinases (UniProtKB)
 #' @param phosphatases List of phosphatases (UniProtKB)
@@ -92,9 +92,9 @@ export2hparacne<-function(datl, output_dir, kinases, phosphatases, interactions=
 
 #' Export to matrix
 #'
-#' This function exports tables in the unified phosphoviper format to a matrix
+#' This function exports tables in the unified vespa format to a matrix
 #'
-#' @param datl Unified phosphoviper format
+#' @param datl Unified vespa format
 #' @param fillvalues Missing value imputation method ("rowmin": Row-wise (peptide) minimum; "colmin": Column-wise (run) minimum; NULL: Skip and use NA)
 #' @param jitter Add numerical noise to imputed missing values
 #' @return matrix
@@ -151,14 +151,14 @@ preprocess_mx<-function(osw, ed) {
   return(oswm)
 }
 
-#' Export to unified phosphoviper format from viper matrix
+#' Export to unified vespa format from viper matrix
 #'
-#' This function exports a viper matrix to the unified phosphoviper format
+#' This function exports a viper matrix to the unified vespa format
 #'
 #' @param matrix phosphoVIPER quantitative matrix
 #' @param fasta Amino acid FASTA file from UniProt
 #' @param tag Site tag
-#' @return phosphoviper table
+#' @return vespa table
 #' @import data.table
 #' @export
 vmx2pv<-function(vmx, fasta=NULL, tag = "PV") {

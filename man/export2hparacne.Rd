@@ -17,7 +17,7 @@ export2hparacne(
 )
 }
 \arguments{
-\item{datl}{Unified phosphoviper format}
+\item{datl}{Unified vespa format}
 
 \item{output_dir}{Output directory}
 
@@ -36,5 +36,5 @@ export2hparacne(
 \item{interaction_level}{Interaction level ("substrate" or "activity")}
 }
 \description{
-This function exports hpARACNe input files from the unified phosphoviper format
+This function exports hpARACNe input files from the unified vespa format
 }

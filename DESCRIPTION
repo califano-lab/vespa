@@ -1,16 +1,16 @@
-Package: phosphoviper
+Package: vespa
 Type: Package
-Title: phosphoVIPER: phosphoproteomic extension for VIPER
+Title: vespa: Virtual Enrichment-based Signaling Protein-activity Analysis 
 Version: 1.0.2
 Author: George Rosenberger
 Maintainer: George Rosenberger <gr2578@cumc.columbia.edu>
-Description: phosphoVIPER provides extensions to analyse phosphoproteomic data using hpARACNe and VIPER.
+Description: VESPA provides extensions to analyse phosphoproteomic data by ARACNe and VIPER.
 License: Columbia University Non-Commercial License
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.1.1
 Imports: 
-    phosphoviper.db,
+    vespa.db,
     data.table,
     limma,
     mixtools,
