@@ -323,11 +323,12 @@ TFscore <- function (regul, mu = NULL, sigma = NULL, verbose=TRUE) {
 #'
 #' @param afile hpARACNe network file
 #' @param pfile hpARACNe peptides file
+#' @param proteinlevel Whether protein-level regulator identifiers are used instead of peptide-level.
 #' @param verbose Logical, whether progression messages should be printed in the terminal
 #' @import data.table
 #' @importFrom plyr dlply .
 #' @export
-hparacne2regulon<-function(afile, pfile, verbose=TRUE) {
+hparacne2regulon<-function(afile, pfile, proteinlevel=FALSE, verbose=TRUE) {
   aracne<-fread(afile)
   if (!("Prior" %in% names(aracne))) {
     aracne$Prior<-NA
@@ -339,14 +340,22 @@ hparacne2regulon<-function(afile, pfile, verbose=TRUE) {
   # Load peptides
   peptides<-fread(pfile)
 
-  # Map peptide identifiers to site identififers
-  aracne<-merge(aracne,peptides[,c("protein_id","peptide_id","site_id"), with = FALSE], by.x="Regulator", by.y="peptide_id", allow.cartesian=TRUE)
-  aracne<-merge(aracne,peptides[,c("protein_id","peptide_id","site_id"), with = FALSE], by.x="Target", by.y="peptide_id", allow.cartesian=TRUE)
+  # Map peptide identifiers to site identifiers
+  if (!proteinlevel) {
+    regulatorpeptides<-peptides[,c("protein_id","peptide_id","site_id"), with = FALSE]
+    names(regulatorpeptides)<-c("regulator_protein_id","regulator_peptide_id","regulator_site_id")
+    aracne<-merge(aracne, regulatorpeptides, by.x="Regulator", by.y="regulator_peptide_id", allow.cartesian=TRUE)
+  } else {
+    aracne$regulator_protein_id<-aracne$regulator_site_id<-aracne$Regulator
+  }
+  targetpeptides<-peptides[,c("protein_id","peptide_id","site_id"), with = FALSE]
+  names(targetpeptides)<-c("target_protein_id","target_peptide_id","target_site_id")
+  aracne<-merge(aracne, targetpeptides, by.x="Target", by.y="target_peptide_id", allow.cartesian=TRUE)
 
   # Remove interactions between sites of the same protein
-  aracne<-subset(aracne, protein_id.x != protein_id.y)
+  aracne<-subset(aracne, regulator_protein_id != target_protein_id)
 
-  aracne<-aracne[,c("site_id.x","site_id.y","MI","Correlation","Prior"), with = FALSE]
+  aracne<-aracne[,c("regulator_site_id","target_site_id","MI","Correlation","Prior"), with = FALSE]
   names(aracne)<-c("Regulator","Target","MI","Correlation","Prior")
 
   # Compute likelihood from MI
