@@ -18,7 +18,7 @@ install_github("califano-lab/vespa")
 ```
 
 ## Usage
-For further information about the data, refer to the (`vespa.tutorial`)[https://github.com/califano-lab/vespa.tutorial] documentation, as well as the R-package help pages for information on individual functions:
+For further information about the data, refer to the [`vespa.tutorial`](https://github.com/califano-lab/vespa.tutorial) documentation, as well as the R-package help pages for information on individual functions:
 
 ```
 library(vespa)
