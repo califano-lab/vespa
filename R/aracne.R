@@ -279,7 +279,7 @@ orthogonalRegulon <- function(ges, regulon, min_size=10, cutoff=0.5) {
   mapregulon<-data.frame("site_id"=names(subregulon),"protein_id"=as.vector(sapply(names(subregulon),function(X){strsplit(X,":")[[1]][2]})))
 
   # identify correlated regulons
-  correlated_regulons<-ddply(mapregulon,.(protein_id),function(X){data.frame("site_id"=findCorrelation(cor(t(vpmx[X$site_id,])), cutoff = cutoff, names=TRUE))})
+  correlated_regulons<-ddply(mapregulon,.(protein_id),function(X){if (dim(X)[1]>1){data.frame("site_id"=findCorrelation(cor(t(vpmx[X$site_id,])), cutoff = cutoff, names=TRUE))}})
 
   # report number of regulons to be removed
   message(paste(length(correlated_regulons$site_id),"regulons out of",length(regulon),"are correlated and will be removed."))
