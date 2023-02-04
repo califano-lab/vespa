@@ -1,4 +1,4 @@
-FROM ghcr.io/califano-lab/vespa.db/vespa.db:latest
+FROM ghcr.io/califano-lab/vespa.db:latest
 
 # install vespa
 ADD ./ ./
